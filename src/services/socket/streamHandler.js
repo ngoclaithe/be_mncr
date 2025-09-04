@@ -513,7 +513,6 @@ class StreamHandler {
                 stream.isLive = isLive;
                 if (isLive && !stream.startTime) {
                     stream.startTime = new Date();
-                    // Tạo và lưu HLS URL
                     const baseUrl = process.env.BASE_URL || `https://api2.scoliv2.com/api/v2`;
                     stream.hlsUrl = `${baseUrl}/streams/${roomId}/stream.m3u8`;
                 } else if (!isLive) {
@@ -525,10 +524,10 @@ class StreamHandler {
                 }
                 await stream.save();
             } else {
-                // console.warn(`⚠️ Could not find stream with key ${roomId} to update status.`);
+                console.warn(`⚠️ Could not find stream with key ${roomId} to update status.`);
             }
         } catch (error) {
-            // console.error(`❌ Error updating stream status in DB for room ${roomId}:`, error);
+            console.error(`❌ Error updating stream status in DB for room ${roomId}:`, error);
         }
     }
 
