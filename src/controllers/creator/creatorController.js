@@ -1,0 +1,535 @@
+const { User, Creator, Follow } = require('../../models');
+const { StatusCodes } = require('http-status-codes');
+const { validationResult } = require('express-validator');
+
+/**
+ * @desc    Get a list of all creators
+ * @route   GET /api/v1/creators
+ * @access  Public
+ */
+const getCreators = async (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(StatusCodes.BAD_REQUEST).json({
+      success: false,
+      errors: errors.array()
+    });
+  }
+
+  try {
+    const { page = 1, limit = 10, isVerified, isLive, sortBy = 'rating' } = req.query;
+    const offset = (page - 1) * limit;
+
+    // Build where conditions for Creator
+    const creatorWhere = {};
+    if (isVerified !== undefined) {
+      creatorWhere.isVerified = isVerified === 'true';
+    }
+    if (isLive !== undefined) {
+      creatorWhere.isLive = isLive === 'true';
+    }
+
+    // Define sort options
+    let orderBy;
+    switch (sortBy) {
+      case 'rating':
+        orderBy = [['rating', 'DESC']];
+        break;
+      case 'newest':
+        orderBy = [['createdAt', 'DESC']];
+        break;
+      case 'earnings':
+        orderBy = [['totalEarnings', 'DESC']];
+        break;
+      default:
+        orderBy = [['rating', 'DESC']];
+    }
+
+    const { count, rows } = await Creator.findAndCountAll({
+      where: creatorWhere,
+      include: [
+        {
+          model: User,
+          as: 'user',
+          where: {
+            role: 'creator',
+            isActive: true,
+          },
+          attributes: ['id', 'username', 'firstName', 'lastName', 'avatar']
+        },
+        {
+          model: Follow,
+          as: 'followers',
+          attributes: []
+        }
+      ],
+      attributes: [
+        'id',
+        'stageName',
+        'bio',
+        'tags',
+        'rating',
+        'totalRatings',
+        'isVerified',
+        'isLive',
+        'hourlyRate',
+        'bookingPrice',
+        'subscriptionPrice',
+        'specialties',
+        'languages',
+        'isAvailableForBooking',
+        'createdAt',
+        [require('sequelize').fn('COUNT', require('sequelize').col('followers.id')), 'followersCount']
+      ],
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+      order: orderBy,
+      group: ['Creator.id', 'user.id'],
+      distinct: true,
+      subQuery: false
+    });
+
+    // Transform data to include userId at top level and followersCount
+    const transformedRows = rows.map(creator => ({
+      id: creator.id,
+      userId: creator.user.id,
+      stageName: creator.stageName,
+      bio: creator.bio,
+      tags: creator.tags,
+      rating: creator.rating,
+      totalRatings: creator.totalRatings,
+      isVerified: creator.isVerified,
+      isLive: creator.isLive,
+      hourlyRate: creator.hourlyRate,
+      bookingPrice: creator.bookingPrice,
+      subscriptionPrice: creator.subscriptionPrice,
+      specialties: creator.specialties,
+      languages: creator.languages,
+      isAvailableForBooking: creator.isAvailableForBooking,
+      createdAt: creator.createdAt,
+      followersCount: parseInt(creator.dataValues.followersCount) || 0,
+      user: creator.user
+    }));
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: transformedRows,
+      pagination: {
+        total: count.length || count,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil((count.length || count) / limit),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get a single creator by ID
+ * @route   GET /api/v1/creators/:id
+ * @access  Public
+ */
+const getCreatorById = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const creator = await Creator.findByPk(id, {
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'username', 'firstName', 'lastName', 'avatar', 'isOnline']
+        },
+        {
+          model: Follow,
+          as: 'followers',
+          attributes: []
+        }
+      ],
+      attributes: [
+        'id',
+        'userId',
+        'stageName',
+        'titleBio',
+        'bio',
+        'bioUrls',
+        'tags',
+        'rating',
+        'totalRatings',
+        'isVerified',
+        'isLive',
+        'hourlyRate',
+        'minBookingDuration',
+        'maxConcurrentBookings',
+        'currentBookingsCount',
+        'totalEarnings',
+        'availabilitySchedule',
+        'bookingPrice',
+        'subscriptionPrice',
+        'specialties',
+        'languages',
+        'bodyType',
+        'height',
+        'weight',
+        'measurement',
+        'eyeColor',
+        'service',
+        'isTatto',
+        'signature',
+        'hairColor',
+        'cosmeticSurgery',
+        'isAvailableForBooking',
+        'createdAt',
+        'updatedAt',
+        [require('sequelize').fn('COUNT', require('sequelize').col('followers.id')), 'followersCount']
+      ],
+      group: ['Creator.id', 'user.id']
+    });
+
+    if (!creator) {
+      return res.status(StatusCodes.NOT_FOUND).json({
+        success: false,
+        message: 'Creator not found'
+      });
+    }
+
+    // Transform data to include userId at top level and followersCount
+    const transformedCreator = {
+      ...creator.toJSON(),
+      userId: creator.user.id,
+      followersCount: parseInt(creator.dataValues.followersCount) || 0
+    };
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: transformedCreator
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get verified creators
+ * @route   GET /api/v1/creators/verified
+ * @access  Public
+ */
+const getVerifiedCreators = async (req, res, next) => {
+  try {
+    const { page = 1, limit = 10 } = req.query;
+    const offset = (page - 1) * limit;
+
+    const { count, rows } = await Creator.findAndCountAll({
+      where: {
+        isVerified: true
+      },
+      include: [{
+        model: User,
+        as: 'user',
+        where: {
+          role: 'creator',
+          isActive: true,
+        },
+        attributes: ['id', 'username', 'firstName', 'lastName', 'avatar']
+      }],
+      attributes: [
+        'id',
+        'stageName',
+        'bio',
+        'tags',
+        'rating',
+        'totalRatings',
+        'isVerified',
+        'specialties',
+        'bookingPrice',
+        'subscriptionPrice'
+      ],
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+      order: [['rating', 'DESC']],
+      distinct: true
+    });
+
+    // Transform data to include userId at top level
+    const transformedRows = rows.map(creator => ({
+      id: creator.id,
+      userId: creator.user.id,
+      stageName: creator.stageName,
+      bio: creator.bio,
+      tags: creator.tags,
+      rating: creator.rating,
+      totalRatings: creator.totalRatings,
+      isVerified: creator.isVerified,
+      specialties: creator.specialties,
+      bookingPrice: creator.bookingPrice,
+      subscriptionPrice: creator.subscriptionPrice,
+      user: creator.user
+    }));
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: transformedRows,
+      pagination: {
+        total: count,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil(count / limit),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get live creators
+ * @route   GET /api/v1/creators/live
+ * @access  Public
+ */
+const getLiveCreators = async (req, res, next) => {
+  try {
+    const { page = 1, limit = 10 } = req.query;
+    const offset = (page - 1) * limit;
+
+    const { count, rows } = await Creator.findAndCountAll({
+      where: {
+        isLive: true
+      },
+      include: [{
+        model: User,
+        as: 'user',
+        where: {
+          role: 'creator',
+          isActive: true,
+        },
+        attributes: ['id', 'username', 'firstName', 'lastName', 'avatar', 'isOnline']
+      }],
+      attributes: [
+        'id',
+        'stageName',
+        'rating',
+        'totalRatings',
+        'isVerified',
+        'tags',
+        'specialties'
+      ],
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+      order: [['updatedAt', 'DESC']], 
+      distinct: true
+    });
+
+    const transformedRows = rows.map(creator => ({
+      id: creator.id,
+      userId: creator.user.id,
+      stageName: creator.stageName,
+      rating: creator.rating,
+      totalRatings: creator.totalRatings,
+      isVerified: creator.isVerified,
+      tags: creator.tags,
+      specialties: creator.specialties,
+      user: creator.user
+    }));
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: transformedRows,
+      pagination: {
+        total: count,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil(count / limit),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Search creators
+ * @route   GET /api/v1/creators/search
+ * @access  Public
+ */
+const searchCreators = async (req, res, next) => {
+  try {
+    const { q: query, page = 1, limit = 10, tags, minRating } = req.query;
+
+    if (!query) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: 'Search query is required'
+      });
+    }
+
+    const offset = (page - 1) * limit;
+    const { Op } = require('sequelize');
+
+    // Build where conditions
+    const creatorWhere = {
+      [Op.or]: [
+        {
+          stageName: {
+            [Op.iLike]: `%${query}%`
+          }
+        },
+        {
+          bio: {
+            [Op.iLike]: `%${query}%`
+          }
+        }
+      ]
+    };
+
+    // Add filters
+    if (tags) {
+      const tagArray = tags.split(',');
+      creatorWhere.tags = {
+        [Op.overlap]: tagArray
+      };
+    }
+
+    if (minRating) {
+      creatorWhere.rating = {
+        [Op.gte]: parseFloat(minRating)
+      };
+    }
+
+    const { count, rows } = await Creator.findAndCountAll({
+      where: creatorWhere,
+      include: [{
+        model: User,
+        as: 'user',
+        where: {
+          role: 'creator',
+          isActive: true,
+        },
+        attributes: ['id', 'username', 'firstName', 'lastName', 'avatar']
+      }],
+      attributes: [
+        'id',
+        'stageName',
+        'bio',
+        'tags',
+        'rating',
+        'totalRatings',
+        'isVerified',
+        'specialties',
+        'bookingPrice',
+        'subscriptionPrice'
+      ],
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+      order: [['rating', 'DESC']],
+      distinct: true
+    });
+
+    const transformedRows = rows.map(creator => ({
+      id: creator.id,
+      userId: creator.user.id,
+      stageName: creator.stageName,
+      bio: creator.bio,
+      tags: creator.tags,
+      rating: creator.rating,
+      totalRatings: creator.totalRatings,
+      isVerified: creator.isVerified,
+      specialties: creator.specialties,
+      bookingPrice: creator.bookingPrice,
+      subscriptionPrice: creator.subscriptionPrice,
+      user: creator.user
+    }));
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: transformedRows,
+      query,
+      pagination: {
+        total: count,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil(count / limit),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}; // KẾT THÚC HÀM searchCreators Ở ĐÂY
+
+/**
+ * @desc    Get featured creators (top 10 most followed)
+ * @route   GET /api/v1/creators/featured
+ * @access  Public
+ */
+const getFeaturedCreators = async (req, res, next) => {
+  try {
+    const featuredCreators = await Creator.findAll({
+      include: [
+        {
+          model: User,
+          as: 'user',
+          where: {
+            role: 'creator',
+            isActive: true,
+          },
+          attributes: ['id', 'username', 'firstName', 'lastName', 'avatar']
+        },
+        {
+          model: Follow,
+          as: 'followers',
+          attributes: []
+        }
+      ],
+      attributes: [
+        'id',
+        'stageName',
+        'bio',
+        'tags',
+        'rating',
+        'totalRatings',
+        'isVerified',
+        'specialties',
+        'bookingPrice',
+        'subscriptionPrice',
+        [require('sequelize').fn('COUNT', require('sequelize').col('followers.id')), 'followersCount']
+      ],
+      group: ['Creator.id', 'user.id'],
+      order: [[require('sequelize').fn('COUNT', require('sequelize').col('followers.id')), 'DESC']],
+      limit: 10,
+      subQuery: false
+    });
+
+    const transformedRows = featuredCreators.map(creator => ({
+      id: creator.id,
+      userId: creator.user.id,
+      stageName: creator.stageName,
+      bio: creator.bio,
+      tags: creator.tags,
+      rating: creator.rating,
+      totalRatings: creator.totalRatings,
+      isVerified: creator.isVerified,
+      specialties: creator.specialties,
+      bookingPrice: creator.bookingPrice,
+      subscriptionPrice: creator.subscriptionPrice,
+      followersCount: parseInt(creator.dataValues.followersCount) || 0,
+      user: creator.user
+    }));
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: transformedRows
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = {
+  getCreators,
+  getCreatorById,
+  getVerifiedCreators,
+  getLiveCreators,
+  searchCreators,
+  getFeaturedCreators
+};
