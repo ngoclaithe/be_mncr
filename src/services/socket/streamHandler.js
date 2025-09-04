@@ -511,21 +511,19 @@ class StreamHandler {
             const stream = await Stream.findOne({ where: { streamKey: roomId } });
             if (stream) {
                 stream.isLive = isLive;
-                // Chỉ đặt startTime nếu nó chưa được đặt
                 if (isLive && !stream.startTime) {
                     stream.startTime = new Date();
                     // Tạo và lưu HLS URL
-                    const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
+                    const baseUrl = process.env.BASE_URL || `https://api2.scoliv2.com/api/v2`;
                     stream.hlsUrl = `${baseUrl}/streams/${roomId}/stream.m3u8`;
                 } else if (!isLive) {
                     stream.endTime = new Date();
                     if (stream.startTime) {
                         stream.duration = Math.floor((stream.endTime - stream.startTime) / 1000);
                     }
-                    stream.hlsUrl = null; // Xóa HLS URL khi stream kết thúc
+                    stream.hlsUrl = null; 
                 }
                 await stream.save();
-                //// console.log(`✅ Stream status updated in DB for room ${roomId}: isLive=${isLive}`);
             } else {
                 // console.warn(`⚠️ Could not find stream with key ${roomId} to update status.`);
             }

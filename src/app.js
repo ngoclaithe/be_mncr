@@ -64,7 +64,7 @@ if (!fs.existsSync(hlsStreamPath)) {
   fs.mkdirSync(hlsStreamPath, { recursive: true });
   logger.info(`Created HLS stream directory at: ${hlsStreamPath}`);
 }
-app.use('/streams', cors(), express.static(hlsStreamPath, {
+app.use('/api/v2/streams', cors(), express.static(hlsStreamPath, {
   maxAge: 0, 
   etag: false,
   lastModified: false,
