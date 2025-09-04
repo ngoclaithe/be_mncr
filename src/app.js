@@ -12,7 +12,6 @@ const { connectDB, sequelize } = require('./config/database');
 const { initializeRedis } = require('./config/redis');
 const config = require('./config');
 const logger = require('./utils/logger');
-const {generateCloudinarySignature} = require('./utils/helpers');
 // const { errorHandler, notFound } = require('./middleware/error.middleware');
 const mqttService = require('./services/mqtt/mqtt');
 
@@ -26,6 +25,14 @@ app.use((req, res, next) => {
 
 app.use(cors(config.cors));
 
+// In ra thông tin cấu hình WebSocket trước khi khởi tạo
+console.log('🔧 WebSocket Configuration:');
+console.log('   Path:', config.websocket.path);
+console.log('   CORS:', JSON.stringify(config.websocket.cors, null, 2));
+console.log('   Transports:', config.websocket.transports);
+console.log('   Ping Timeout:', config.websocket.pingTimeout);
+console.log('   Ping Interval:', config.websocket.pingInterval);
+
 const io = new Server(httpServer, {
   cors: config.websocket.cors,
   path: config.websocket.path,
@@ -37,6 +44,11 @@ const io = new Server(httpServer, {
   allowUpgrades: config.websocket.allowUpgrades,
   perMessageDeflate: config.websocket.perMessageDeflate
 });
+
+// In ra thông tin Socket.IO sau khi khởi tạo
+console.log('📡 Socket.IO Server initialized:');
+console.log('   Engine path:', io.engine.opts.path);
+console.log('   CORS settings:', JSON.stringify(io.engine.opts.cors, null, 2));
 
 app.use(helmet({
   crossOriginEmbedderPolicy: false,
@@ -56,7 +68,6 @@ app.use(express.urlencoded({
 }));
 
 app.use(cookieParser());
-
 
 // Phục vụ các file HLS (HTTP Live Streaming)
 const hlsStreamPath = path.join(__dirname, '..', 'public', 'streams');
@@ -84,6 +95,18 @@ webSocketService.initialize();
 
 io.engine.on('connection_error', (err) => {
   logger.error('Socket.IO connection error:', err);
+});
+
+// Log khi có connection mới
+io.on('connection', (socket) => {
+  console.log('🔌 New socket connection:');
+  console.log('   Socket ID:', socket.id);
+  console.log('   Connection URL:', socket.request.url);
+  console.log('   Headers:', JSON.stringify(socket.request.headers, null, 2));
+  
+  socket.on('disconnect', (reason) => {
+    console.log('❌ Socket disconnected:', socket.id, 'Reason:', reason);
+  });
 });
 
 app.use((req, res, next) => {
@@ -225,7 +248,18 @@ const startServer = async () => {
     // }
 
     const server = httpServer.listen(config.port, config.host, () => {
-      logger.info(`API Documentation: http://${config.host}:${config.port}/api-docs`);
+      // In ra thông tin server và socket URLs
+      const serverUrl = `http://${config.host}:${config.port}`;
+      const socketUrl = `${serverUrl}${config.websocket.path || '/socket.io/'}`;
+      
+      console.log('🚀 Server Information:');
+      console.log('   Server URL:', serverUrl);
+      console.log('   Socket.IO URL:', socketUrl);
+      console.log('   Socket Path:', config.websocket.path || '/socket.io/');
+      console.log('   API Documentation:', `${serverUrl}/api-docs`);
+      console.log('   WebSocket Transports:', config.websocket.transports);
+      
+      logger.info(`API Documentation: ${serverUrl}/api-docs`);
     });
 
     const gracefulShutdown = (signal) => {
