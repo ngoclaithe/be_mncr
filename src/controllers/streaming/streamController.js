@@ -33,7 +33,8 @@ class StreamController {
         isPrivate = false,
         chatEnabled = true,
         donationsEnabled = true,
-        pricePerMinute
+        pricePerMinute,
+        thumbnail
       } = req.body;
       
       const userId = req.user.id;
@@ -62,14 +63,15 @@ class StreamController {
         tags: tags || [],
         quality,
         isPrivate,
-        isLive: false, // Sẽ được set true khi socket connection thành công
+        isLive: false, 
         chatEnabled,
         donationsEnabled,
         pricePerMinute,
         streamKey,
         viewerCount: 0,
         maxViewers: 0,
-        totalDonations: 0.0
+        totalDonations: 0.0,
+        thumbnail
       });
 
       logger.info(`Stream session ${stream.id} created by creator ${creator.id} with key "${stream.streamKey}"`);
@@ -113,7 +115,6 @@ class StreamController {
 
       logger.info(`Found stream ${stream.id}, isLive: ${stream.isLive}`);
 
-      // Tính duration nếu có startTime
       const duration = stream.startTime ? 
         Math.floor((new Date() - stream.startTime) / 1000) : 0;
 
@@ -217,7 +218,6 @@ class StreamController {
 
   getStreamInfo = async (req, res, next) => {
     try {
-      // NOTE: This route might need to be updated to use `streamKey` instead of `streamId` for consistency.
       const { streamId } = req.params; 
       
       const streamData = await Stream.findByPk(streamId, {

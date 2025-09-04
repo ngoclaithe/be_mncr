@@ -25,14 +25,6 @@ app.use((req, res, next) => {
 
 app.use(cors(config.cors));
 
-// In ra thông tin cấu hình WebSocket trước khi khởi tạo
-console.log('🔧 WebSocket Configuration:');
-console.log('   Path:', config.websocket.path);
-console.log('   CORS:', JSON.stringify(config.websocket.cors, null, 2));
-console.log('   Transports:', config.websocket.transports);
-console.log('   Ping Timeout:', config.websocket.pingTimeout);
-console.log('   Ping Interval:', config.websocket.pingInterval);
-
 const io = new Server(httpServer, {
   cors: config.websocket.cors,
   path: config.websocket.path,
@@ -44,11 +36,6 @@ const io = new Server(httpServer, {
   allowUpgrades: config.websocket.allowUpgrades,
   perMessageDeflate: config.websocket.perMessageDeflate
 });
-
-// In ra thông tin Socket.IO sau khi khởi tạo
-console.log('📡 Socket.IO Server initialized:');
-console.log('   Engine path:', io.engine.opts.path);
-console.log('   CORS settings:', JSON.stringify(io.engine.opts.cors, null, 2));
 
 app.use(helmet({
   crossOriginEmbedderPolicy: false,
@@ -97,7 +84,6 @@ io.engine.on('connection_error', (err) => {
   logger.error('Socket.IO connection error:', err);
 });
 
-// Log khi có connection mới
 io.on('connection', (socket) => {
   console.log('🔌 New socket connection:');
   console.log('   Socket ID:', socket.id);
@@ -122,7 +108,6 @@ app.use((req, res, next) => {
 
 async function initApp() {
   try {
-    console.log('🔄 Connecting to MQTT broker...');
     await mqttService.connect();
     console.log('✅ MQTT connected successfully!');
     
@@ -210,17 +195,6 @@ app.use('/api/v2/stream-gifts', giftRoutes);
 app.use('/api/v2/bookings', bookingRoutes);
 app.use('/api/v2/reviews', reviewRoutes);
 
-// app.get('/', (req, res) => {
-//   res.status(200).json({
-//     success: true,
-//     message: 'Livestream Backend',
-//     version: '1.0.0',
-//     health: '/health',
-//     timestamp: new Date().toISOString(),
-//     environment: config.nodeEnv
-//   });
-// });
-
 // app.use(notFound);
 // app.use(errorHandler);
 
@@ -248,17 +222,7 @@ const startServer = async () => {
     // }
 
     const server = httpServer.listen(config.port, config.host, () => {
-      // In ra thông tin server và socket URLs
-      const serverUrl = `http://${config.host}:${config.port}`;
-      const socketUrl = `${serverUrl}${config.websocket.path || '/socket.io/'}`;
-      
-      console.log('🚀 Server Information:');
-      console.log('   Server URL:', serverUrl);
-      console.log('   Socket.IO URL:', socketUrl);
-      console.log('   Socket Path:', config.websocket.path || '/socket.io/');
-      console.log('   API Documentation:', `${serverUrl}/api-docs`);
-      console.log('   WebSocket Transports:', config.websocket.transports);
-      
+      const serverUrl = `http://${config.host}:${config.port}`;      
       logger.info(`API Documentation: ${serverUrl}/api-docs`);
     });
 
