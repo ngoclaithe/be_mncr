@@ -493,7 +493,7 @@ class CallHandler {
     }
   }
 
-  handleCallReject(socket, data) {
+handleCallReject(socket, data) {
     try {
       console.log(`[Socket RECV] call_reject from ${socket.id}: ${JSON.stringify(data)}`);
       const { callRoomId, token } = data;
@@ -539,26 +539,39 @@ class CallHandler {
         isAuthorized: String(userSession.userId) === String(callRoom.receiverId)
       });
 
+      // CONSOLE LOG: Thông tin trước khi emit call_rejected
+      console.log(`[EMIT DEBUG] Preparing to emit call_rejected for room ${callRoomId}`);
+      console.log(`[EMIT DEBUG] Call room participants:`, Array.from(callRoom.participants));
+      
+      const rejectData = {
+        callRoomId,
+        rejecterId: userSession.userId,
+        rejecterUsername: userSession.username,
+        timestamp: Date.now()
+      };
+      console.log(`[EMIT DEBUG] Reject data to be sent:`, rejectData);
+
       for (let [socketId, session] of this.userSessions.entries()) {
         const sessionUserId = String(session.userId);
         if (sessionUserId === String(callRoom.callerId)) {
           const callerSocket = this.io.sockets.sockets.get(socketId);
           if (callerSocket) {
-            callerSocket.emit('call_rejected', {
-              callRoomId,
-              rejecterId: userSession.userId,
-              rejecterUsername: userSession.username,
-              timestamp: Date.now()
-            });
-            console.log(`Call rejection notification sent to caller ${session.username}`);
+            console.log(`[EMIT SUCCESS] Emitting call_rejected to caller socket ${socketId} (${session.username})`);
+            callerSocket.emit('call_rejected', rejectData);
+            console.log(`[EMIT SUCCESS] call_rejected event sent successfully to caller ${session.username}`);
+          } else {
+            console.log(`[EMIT WARNING] Caller socket ${socketId} exists in userSessions but not in connected sockets`);
           }
           break;
         }
       }
 
+      // CONSOLE LOG: Trước khi close room
+      console.log(`[ROOM DEBUG] About to close call room ${callRoomId} - current participants:`, Array.from(callRoom.participants));
+
       this.closeCallRoom(callRoomId, 'rejected');
 
-      console.log(`Call ${callRoomId} rejected by ${userSession.username}`);
+      console.log(`[COMPLETE] Call ${callRoomId} rejected by ${userSession.username}`);
     } catch (error) {
       logger.error(`Error handling call_reject:`, error);
       socket.emit('error', { message: 'Failed to reject call' });
@@ -608,16 +621,30 @@ class CallHandler {
       userSession.username = decoded.userName;
       userSession.authenticated = true;
 
-      this.io.to(callRoomId).emit('call_ended', {
+      // CONSOLE LOG: Thông tin trước khi emit call_ended
+      console.log(`[EMIT DEBUG] Preparing to emit call_ended for room ${callRoomId}`);
+      console.log(`[EMIT DEBUG] Call room participants:`, Array.from(callRoom.participants));
+      console.log(`[EMIT DEBUG] Will emit to all participants in room via io.to(${callRoomId})`);
+
+      const endData = {
         callRoomId,
         endedBy: userSession.userId,
         endedByUsername: userSession.username,
         timestamp: Date.now()
-      });
+      };
+      console.log(`[EMIT DEBUG] End data to be sent:`, endData);
+
+      // Emit call_ended to all participants in the room
+      console.log(`[EMIT SUCCESS] Emitting call_ended to all participants in room ${callRoomId}`);
+      this.io.to(callRoomId).emit('call_ended', endData);
+      console.log(`[EMIT SUCCESS] call_ended event broadcasted to room ${callRoomId}`);
+
+      // CONSOLE LOG: Trước khi close room
+      console.log(`[ROOM DEBUG] About to close call room ${callRoomId} - current participants:`, Array.from(callRoom.participants));
 
       this.closeCallRoom(callRoomId, 'ended');
 
-      console.log(`Call ${callRoomId} ended by ${userSession.username}`);
+      console.log(`[COMPLETE] Call ${callRoomId} ended by ${userSession.username}`);
     } catch (error) {
       logger.error(`Error handling call_end:`, error);
       socket.emit('error', { message: 'Failed to end call' });
