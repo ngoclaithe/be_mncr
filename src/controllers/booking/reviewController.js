@@ -471,6 +471,54 @@ const respondToReview = async (req, res) => {
         });
     }
 };
+const getAllReviews = async (req, res) => {
+   try {
+       const { page = 1, limit = 10, sortBy = 'createdAt', order = 'desc' } = req.query;
+
+       const offset = (page - 1) * limit;
+
+       const reviews = await Review.findAndCountAll({
+           where: {
+               isPublic: true
+           },
+           include: [
+               {
+                   model: User,
+                   as: 'user',
+                   attributes: ['id', 'username', 'firstName', 'lastName', 'avatar']
+               },
+               {
+                   model: Creator,
+                   as: 'creator',
+                   attributes: ['id', 'stageName']
+               }
+           ],
+           order: [[sortBy, order.toUpperCase()]],
+           limit: parseInt(limit),
+           offset: offset
+       });
+
+       res.status(StatusCodes.OK).json({
+           success: true,
+           data: {
+               reviews: reviews.rows,
+               pagination: {
+                   currentPage: parseInt(page),
+                   totalPages: Math.ceil(reviews.count / limit),
+                   totalItems: reviews.count,
+                   limit: parseInt(limit)
+               }
+           }
+       });
+
+   } catch (error) {
+       logger.error('Error fetching all reviews:', error);
+       res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+           success: false,
+           message: 'Internal server error'
+       });
+   }
+};
 
 module.exports = {
     postReview,
@@ -479,5 +527,6 @@ module.exports = {
     updateReview,
     deleteReview,
     getUserPublicReviews,
-    respondToReview
+    respondToReview,
+    getAllReviews
 };
