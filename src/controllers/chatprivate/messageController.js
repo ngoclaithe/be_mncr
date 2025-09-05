@@ -114,185 +114,180 @@ class MessageController {
     }
   }
 
-  // POST /api/conversations/:conversationId/messages - Tạo message mới
-  async createMessage(req, res) {
-    try {
-      const senderId = req.user.id;
-      const conversationId = req.params.conversationId;
-      let { content, messageType, mediaUrl } = req.body;
+// POST /api/conversations/:conversationId/messages - Tạo message mới
+async createMessage(req, res) {
+  try {
+    const senderId = req.user.id;
+    const conversationId = req.params.conversationId;
+    let { content, messageType, mediaUrl } = req.body;
 
-      // Fix: Nếu không có messageType nhưng có content, mặc định là 'text'
-      if (!messageType && content && typeof content === 'string' && content.trim()) {
-        messageType = 'text';
-      }
+    // Fix: Nếu không có messageType nhưng có content, mặc định là 'text'
+    if (!messageType && content && typeof content === 'string' && content.trim()) {
+      messageType = 'text';
+    }
 
-      // Fix: Nếu messageType là 'text' nhưng không có content, báo lỗi
-      if (messageType === 'text' && (!content || !content.trim())) {
-        return res.status(400).json({
-          success: false,
-          message: 'Content is required for text messages'
-        });
-      }
-
-      const webSocketService = req.app.get('webSocketService');
-      const callHandler = webSocketService ? webSocketService.callHandler : null;
-
-      const conversation = await Conversation.findOne({
-        where: {
-          id: conversationId,
-          [Op.or]: [
-            { senderId },
-            { receiverId: senderId }
-          ]
-        },
-        include: [
-          {
-            model: User,
-            as: 'sender',
-            attributes: ['id', 'username', 'firstName', 'lastName', 'avatar']
-          },
-          {
-            model: User,
-            as: 'receiver',
-            attributes: ['id', 'username', 'firstName', 'lastName', 'avatar']
-          }
-        ]
-      });
-
-      if (!conversation) {
-        return res.status(404).json({
-          success: false,
-          message: 'Conversation not found'
-        });
-      }
-
-      // Kiểm tra conversation có bị block không
-      if (conversation.isBlocked) {
-        return res.status(403).json({
-          success: false,
-          message: 'Cannot send message to blocked conversation'
-        });
-      }
-
-      // Xác định receiverId
-      const receiverId = conversation.senderId === senderId ? conversation.receiverId : conversation.senderId;
-
-      // Tạo message mới
-      const message = await Message.create({
-        conversationId: conversationId,
-        senderId,
-        receiverId,
-        content: messageType === 'text' ? content : null,
-        messageType: messageType || 'text',
-        mediaUrl: ['image', 'video', 'gift'].includes(messageType) ? mediaUrl : null
-      });
-
-      // Cập nhật lastMessage và lastMessageAt trong conversation
-      await conversation.update({
-        lastMessageId: message.id,
-        lastMessageAt: message.createdAt
-      });
-
-      // Reload message với thông tin sender
-      const newMessage = await Message.findByPk(message.id, {
-        include: [
-          {
-            model: User,
-            as: 'sender',
-            attributes: ['id', 'username', 'firstName', 'lastName', 'avatar']
-          },
-          {
-            model: User,
-            as: 'receiver',
-            attributes: ['id', 'username', 'firstName', 'lastName', 'avatar']
-          }
-        ]
-      });
-
-      let responseData = {
-        message: {
-          id: newMessage.id,
-          sender: {
-            id: newMessage.sender.id,
-            username: newMessage.sender.username,
-            displayName: `${newMessage.sender.firstName || ''} ${newMessage.sender.lastName || ''}`.trim(),
-            avatar: newMessage.sender.avatar
-          },
-          receiver: {
-            id: newMessage.receiver.id,
-            username: newMessage.receiver.username,
-            displayName: `${newMessage.receiver.firstName || ''} ${newMessage.receiver.lastName || ''}`.trim(),
-            avatar: newMessage.receiver.avatar
-          },
-          content: newMessage.content,
-          messageType: newMessage.messageType,
-          mediaUrl: newMessage.mediaUrl,
-          reactions: newMessage.reactions || [],
-          createdAt: newMessage.createdAt,
-          updatedAt: newMessage.updatedAt
-        }
-      };
-
-      // Tạo room chat cho cuộc gọi audio/video
-      if (messageType === 'audio' || messageType === 'video') {
-        const callRoomId = `call_${conversation.topic || conversationId}_${Date.now()}`;
-
-        // Tạo notification cho receiver
-        await MessageController.createNotification(receiverId, {
-          type: 'call_request',
-          title: `${messageType === 'audio' ? 'Voice' : 'Video'} Call`,
-          message: `${req.user.username} is calling you`,
-          data: {
-            conversationId: conversationId,
-            messageId: message.id,
-            senderId: senderId,
-            senderUsername: req.user.username,
-            messageType,
-            callRoomId: callRoomId,
-            callType: messageType
-          }
-        });
-
-        // Tạo call room trong call handler
-        if (callHandler && callHandler.createCallRoom) {
-          callHandler.createCallRoom(callRoomId, {
-            conversationId,
-            messageId: message.id,
-            callerId: senderId,
-            callerUsername: req.user.username,
-            receiverId: receiverId,
-            receiverUsername: newMessage.receiver.username,
-            callType: messageType,
-            createdAt: Date.now()
-          });
-        }
-
-        // Thêm thông tin call room vào response
-        responseData.callRoom = {
-          roomId: callRoomId,
-          callType: messageType,
-          status: 'waiting'
-        };
-
-        logger.info(`${messageType} call initiated from user ${senderId} to ${receiverId}, room: ${callRoomId}`);
-      }
-
-      res.status(201).json({
-        success: true,
-        data: responseData
-      });
-
-      logger.info(`Message sent from user ${senderId} to ${receiverId} in conversation ${conversationId}`);
-    } catch (error) {
-      logger.error('Error creating message:', error);
-      res.status(500).json({
+    // Fix: Nếu messageType là 'text' nhưng không có content, báo lỗi
+    if (messageType === 'text' && (!content || !content.trim())) {
+      return res.status(400).json({
         success: false,
-        message: 'Internal server error',
-        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        message: 'Content is required for text messages'
       });
     }
-  }
 
+    const webSocketService = req.app.get('webSocketService');
+    const callHandler = webSocketService ? webSocketService.callHandler : null;
+
+    const conversation = await Conversation.findOne({
+      where: {
+        id: conversationId,
+        [Op.or]: [
+          { senderId },
+          { receiverId: senderId }
+        ]
+      },
+      include: [
+        {
+          model: User,
+          as: 'sender',
+          attributes: ['id', 'username', 'firstName', 'lastName', 'avatar']
+        },
+        {
+          model: User,
+          as: 'receiver',
+          attributes: ['id', 'username', 'firstName', 'lastName', 'avatar']
+        }
+      ]
+    });
+
+    if (!conversation) {
+      return res.status(404).json({
+        success: false,
+        message: 'Conversation not found'
+      });
+    }
+
+    // Kiểm tra conversation có bị block không
+    if (conversation.isBlocked) {
+      return res.status(403).json({
+        success: false,
+        message: 'Cannot send message to blocked conversation'
+      });
+    }
+
+    // Xác định receiverId
+    const receiverId = conversation.senderId === senderId ? conversation.receiverId : conversation.senderId;
+
+    // Tạo message mới
+    const message = await Message.create({
+      conversationId: conversationId,
+      senderId,
+      receiverId,
+      content: messageType === 'text' ? content : null,
+      messageType: messageType || 'text',
+      mediaUrl: ['image', 'video', 'gift'].includes(messageType) ? mediaUrl : null
+    });
+
+    // Cập nhật lastMessage và lastMessageAt trong conversation
+    await conversation.update({
+      lastMessageId: message.id,
+      lastMessageAt: message.createdAt
+    });
+
+    // Reload message với thông tin sender
+    const newMessage = await Message.findByPk(message.id, {
+      include: [
+        {
+          model: User,
+          as: 'sender',
+          attributes: ['id', 'username', 'firstName', 'lastName', 'avatar']
+        },
+        {
+          model: User,
+          as: 'receiver',
+          attributes: ['id', 'username', 'firstName', 'lastName', 'avatar']
+        }
+      ]
+    });
+
+    let responseData = {
+      message: {
+        id: newMessage.id,
+        sender: {
+          id: newMessage.sender.id,
+          username: newMessage.sender.username,
+          displayName: `${newMessage.sender.firstName || ''} ${newMessage.sender.lastName || ''}`.trim(),
+          avatar: newMessage.sender.avatar
+        },
+        receiver: {
+          id: newMessage.receiver.id,
+          username: newMessage.receiver.username,
+          displayName: `${newMessage.receiver.firstName || ''} ${newMessage.receiver.lastName || ''}`.trim(),
+          avatar: newMessage.receiver.avatar
+        },
+        content: newMessage.content,
+        messageType: newMessage.messageType,
+        mediaUrl: newMessage.mediaUrl,
+        reactions: newMessage.reactions || [],
+        createdAt: newMessage.createdAt,
+        updatedAt: newMessage.updatedAt
+      }
+    };
+
+    if (messageType === 'audio' || messageType === 'video') {
+      const callRoomId = `call_${conversation.topic || conversationId}_${Date.now()}`;
+
+      await MessageController.createNotification(receiverId, {
+        type: 'call_request',
+        title: `${messageType === 'audio' ? 'Voice' : 'Video'} Call`,
+        message: `${req.user.username} is calling you`,
+        data: {
+          conversationId: conversationId,
+          messageId: message.id,
+          senderId: senderId,
+          senderUsername: req.user.username,
+          messageType,
+          callRoomId: callRoomId,
+          callType: messageType
+        }
+      });
+
+      if (callHandler && callHandler.createCallRoom) {
+        callHandler.createCallRoom(callRoomId, {
+          conversationId,
+          messageId: message.id,
+          callerId: senderId,
+          callerUsername: req.user.username,
+          receiverId: receiverId,
+          receiverUsername: newMessage.receiver.username,
+          callType: messageType,
+          createdAt: Date.now()
+        });
+      }
+
+      responseData.callRoom = {
+        roomId: callRoomId,
+        callType: messageType,
+        status: 'waiting'
+      };
+
+      logger.info(`${messageType} call initiated from user ${senderId} to ${receiverId}, room: ${callRoomId}`);
+    }
+
+    res.status(201).json({
+      success: true,
+      data: responseData
+    });
+
+    logger.info(`Message sent from user ${senderId} to ${receiverId} in conversation ${conversationId}`);
+  } catch (error) {
+    logger.error('Error creating message:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+}
   // GET /api/messages/:id - Lấy chi tiết message
   async getMessageById(req, res) {
     try {
