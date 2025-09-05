@@ -19,6 +19,7 @@ const {
 } = require('../../middleware/validation/reviewValidation.js');
 
 // Public routes
+router.get('/all', getAllReviews);
 router.get('/creator/:creatorId', validateGetReviews, getReviews);
 router.get('/user-public/:userId', getUserPublicReviews);
 router.get('/:id', getReviewById);
