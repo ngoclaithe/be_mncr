@@ -36,6 +36,7 @@ class StreamController {
         pricePerMinute,
         thumbnail
       } = req.body;
+      console.log("Giá trị thumbnail là", thumbnail);
       
       const userId = req.user.id;
 
