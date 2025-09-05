@@ -117,29 +117,25 @@ class MessageController {
   // POST /api/conversations/:conversationId/messages - Tạo message mới
   async createMessage(req, res) {
     try {
-      // Debug thông tin đầu vào
-      console.log("=== CREATE MESSAGE DEBUG ===");
-      console.log("1. Request body:", req.body);
-      console.log("2. User ID:", req.user.id);
-      console.log("3. Conversation ID:", req.params.conversationId);
-
       const senderId = req.user.id;
       const conversationId = req.params.conversationId;
-      const { content, messageType, mediaUrl } = req.body;
+      let { content, messageType, mediaUrl } = req.body;
 
-      console.log("4. Extracted data:", {
-        senderId,
-        conversationId,
-        content,
-        messageType,
-        mediaUrl
-      });
+      // Fix: Nếu không có messageType nhưng có content, mặc định là 'text'
+      if (!messageType && content && typeof content === 'string' && content.trim()) {
+        messageType = 'text';
+      }
+
+      // Fix: Nếu messageType là 'text' nhưng không có content, báo lỗi
+      if (messageType === 'text' && (!content || !content.trim())) {
+        return res.status(400).json({
+          success: false,
+          message: 'Content is required for text messages'
+        });
+      }
 
       const webSocketService = req.app.get('webSocketService');
       const callHandler = webSocketService ? webSocketService.callHandler : null;
-
-      console.log("5. WebSocket service available:", !!webSocketService);
-      console.log("6. Call handler available:", !!callHandler);
 
       const conversation = await Conversation.findOne({
         where: {
@@ -163,18 +159,7 @@ class MessageController {
         ]
       });
 
-      console.log("7. Conversation found:", !!conversation);
-      if (conversation) {
-        console.log("8. Conversation details:", {
-          id: conversation.id,
-          senderId: conversation.senderId,
-          receiverId: conversation.receiverId,
-          isBlocked: conversation.isBlocked
-        });
-      }
-
       if (!conversation) {
-        console.log("❌ Conversation not found");
         return res.status(404).json({
           success: false,
           message: 'Conversation not found'
@@ -183,7 +168,6 @@ class MessageController {
 
       // Kiểm tra conversation có bị block không
       if (conversation.isBlocked) {
-        console.log("❌ Conversation is blocked");
         return res.status(403).json({
           success: false,
           message: 'Cannot send message to blocked conversation'
@@ -192,29 +176,22 @@ class MessageController {
 
       // Xác định receiverId
       const receiverId = conversation.senderId === senderId ? conversation.receiverId : conversation.senderId;
-      console.log("9. Receiver ID determined:", receiverId);
 
       // Tạo message mới
-      const messageData = {
+      const message = await Message.create({
         conversationId: conversationId,
         senderId,
         receiverId,
         content: messageType === 'text' ? content : null,
-        messageType,
+        messageType: messageType || 'text',
         mediaUrl: ['image', 'video', 'gift'].includes(messageType) ? mediaUrl : null
-      };
-
-      console.log("10. Message data to create:", messageData);
-
-      const message = await Message.create(messageData);
-      console.log("11. Message created with ID:", message.id);
+      });
 
       // Cập nhật lastMessage và lastMessageAt trong conversation
       await conversation.update({
         lastMessageId: message.id,
         lastMessageAt: message.createdAt
       });
-      console.log("12. Conversation updated with last message");
 
       // Reload message với thông tin sender
       const newMessage = await Message.findByPk(message.id, {
@@ -231,8 +208,6 @@ class MessageController {
           }
         ]
       });
-
-      console.log("13. Message reloaded with user info");
 
       let responseData = {
         message: {
@@ -258,12 +233,9 @@ class MessageController {
         }
       };
 
-      // Xử lý call cho audio/video
+      // Tạo room chat cho cuộc gọi audio/video
       if (messageType === 'audio' || messageType === 'video') {
-        console.log("14. Processing audio/video call");
-
         const callRoomId = `call_${conversation.topic || conversationId}_${Date.now()}`;
-        console.log("15. Call room ID generated:", callRoomId);
 
         // Tạo notification cho receiver
         await MessageController.createNotification(receiverId, {
@@ -280,7 +252,6 @@ class MessageController {
             callType: messageType
           }
         });
-        console.log("16. Notification created for receiver");
 
         // Tạo call room trong call handler
         if (callHandler && callHandler.createCallRoom) {
@@ -294,9 +265,6 @@ class MessageController {
             callType: messageType,
             createdAt: Date.now()
           });
-          console.log("17. Call room created in call handler");
-        } else {
-          console.log("17. Call handler not available or createCallRoom method missing");
         }
 
         // Thêm thông tin call room vào response
@@ -306,12 +274,8 @@ class MessageController {
           status: 'waiting'
         };
 
-        console.log("18. Call room info added to response");
         logger.info(`${messageType} call initiated from user ${senderId} to ${receiverId}, room: ${callRoomId}`);
       }
-
-      console.log("19. Final response data:", JSON.stringify(responseData, null, 2));
-      console.log("=== CREATE MESSAGE SUCCESS ===");
 
       res.status(201).json({
         success: true,
@@ -320,8 +284,6 @@ class MessageController {
 
       logger.info(`Message sent from user ${senderId} to ${receiverId} in conversation ${conversationId}`);
     } catch (error) {
-      console.error("❌ CREATE MESSAGE ERROR:", error);
-      console.error("Error stack:", error.stack);
       logger.error('Error creating message:', error);
       res.status(500).json({
         success: false,
