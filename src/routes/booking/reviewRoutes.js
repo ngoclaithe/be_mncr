@@ -7,7 +7,8 @@ const {
     updateReview,
     deleteReview,
     getUserPublicReviews,
-    respondToReview
+    respondToReview,
+    getAllReviews
 } = require('../../controllers/booking/reviewController');
 
 const { protect } = require('../../middleware/auth');
