@@ -2,6 +2,7 @@ const { Transaction, InfoPayment, User, Wallet, sequelize } = require('../../mod
 const { StatusCodes } = require('http-status-codes');
 const ApiError = require('../../utils/ApiError');
 const { validationResult } = require('express-validator');
+const { Op } = require('sequelize');
 
 /**
  * @desc    Create a new deposit request transaction
@@ -131,12 +132,12 @@ const getTransactions = async (req, res, next) => {
     
     // If not admin, only show user's own transactions
     if (req.user.role !== 'admin') {
-      whereClause[sequelize.Op.or] = [
+      whereClause[Op.or] = [
         { fromUserId: req.user.id },
         { toUserId: req.user.id }
       ];
     } else if (userId) {
-      whereClause[sequelize.Op.or] = [
+      whereClause[Op.or] = [
         { fromUserId: userId },
         { toUserId: userId }
       ];
@@ -152,7 +153,7 @@ const getTransactions = async (req, res, next) => {
 
     if (startDate && endDate) {
       whereClause.createdAt = {
-        [sequelize.Op.between]: [new Date(startDate), new Date(endDate)]
+        [Op.between]: [new Date(startDate), new Date(endDate)]
       };
     }
 
