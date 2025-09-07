@@ -191,15 +191,19 @@ const updateRequestStatus = async (req, res, next) => {
       return next(new ApiError(`Cannot update a request that is already ${request.status}`, StatusCodes.BAD_REQUEST));
     }
 
+    console.log('✅ Status check passed, proceeding with transaction...');
     console.log('Processing status update for request:', request.toJSON());
 
     const result = await sequelize.transaction(async (t) => {
+      console.log('🔄 Transaction started');
+      
       // Update request status
+      console.log('Updating request status and metadata...');
       request.status = status;
       request.metadata = metadata || request.metadata;
       await request.save({ transaction: t });
 
-      console.log('Request status updated successfully:', {
+      console.log('✅ Request status updated successfully:', {
         requestId: id,
         newStatus: status,
         amount: request.amount
@@ -207,36 +211,56 @@ const updateRequestStatus = async (req, res, next) => {
 
       // If approved/completed, update wallet tokens
       if (status === 'completed' || status === 'approved') {
-        console.log('Processing wallet update for completed/approved request...');
+        console.log('🪙 Processing wallet update for completed/approved request...');
+        console.log('Target user ID:', request.userId);
         
         // Find or create user wallet
+        console.log('🔍 Finding wallet for user:', request.userId);
         let wallet = await Wallet.findOne({ 
           where: { userId: request.userId },
           transaction: t 
         });
 
+        console.log('Wallet query result:', wallet ? wallet.toJSON() : 'null');
+
         if (!wallet) {
-          console.log('Creating new wallet for user:', request.userId);
+          console.log('🆕 Creating new wallet for user:', request.userId);
           wallet = await Wallet.create({ 
             userId: request.userId,
             balance: 0,
-            tokens: 0
+            tokens: 0,
+            totalDeposited: 0
           }, { transaction: t });
+          console.log('✅ New wallet created:', wallet.toJSON());
         }
 
         // Calculate tokens (1000 VND = 1 token)
         const tokensToAdd = Math.floor(request.amount / 1000);
-        const previousTokens = wallet.tokens;
-        const previousTotalDeposited = wallet.totalDeposited;
+        const previousTokens = wallet.tokens || 0;
+        const previousTotalDeposited = wallet.totalDeposited || 0;
 
-        console.log('Token calculation:', {
+        console.log('💰 Token calculation:', {
           depositAmount: request.amount,
+          amountType: typeof request.amount,
           tokensToAdd,
+          tokensToAddType: typeof tokensToAdd,
           previousTokens,
-          newTokens: previousTokens + tokensToAdd
+          previousTokensType: typeof previousTokens,
+          newTokens: previousTokens + tokensToAdd,
+          conversionRate: '1000 VND = 1 token'
         });
 
+        // Validate calculation
+        if (isNaN(tokensToAdd) || tokensToAdd < 0) {
+          console.error('❌ Invalid token calculation:', {
+            tokensToAdd,
+            depositAmount: request.amount
+          });
+          throw new Error('Invalid token calculation');
+        }
+
         // Update wallet tokens and total deposited
+        console.log('🔄 Updating wallet with increment...');
         await wallet.increment({
           tokens: tokensToAdd,
           totalDeposited: request.amount
@@ -245,7 +269,7 @@ const updateRequestStatus = async (req, res, next) => {
         // Fetch updated wallet data
         await wallet.reload({ transaction: t });
 
-        console.log('Wallet updated successfully:', {
+        console.log('✅ Wallet updated successfully:', {
           userId: request.userId,
           previousTokens,
           tokensAdded: tokensToAdd,
@@ -254,23 +278,33 @@ const updateRequestStatus = async (req, res, next) => {
           newTotalDeposited: wallet.totalDeposited,
           depositAmount: request.amount
         });
+      } else {
+        console.log('ℹ️ Status is not completed/approved, skipping wallet update');
       }
 
+      console.log('🔄 Transaction completing...');
       return request;
     });
 
-    console.log('Transaction completed successfully:', {
+    console.log('✅ Transaction completed successfully:', {
       requestId: id,
       finalStatus: result.status
     });
 
+    console.log('📤 Sending response...');
     res.status(StatusCodes.OK).json({
       success: true,
       message: `Request has been ${status}.`,
       data: result,
     });
+
+    console.log('=== UPDATE REQUEST STATUS SUCCESS ===');
   } catch (error) {
-    console.error('Error updating deposit request status:', error);
+    console.error('❌ ERROR in updateRequestStatus:', error);
+    console.error('Error stack:', error.stack);
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
+    console.log('=== UPDATE REQUEST STATUS FAILED ===');
     next(error);
   }
 };
