@@ -560,35 +560,6 @@ const getCallgirlCreators = async (req, res, next) => {
     const offset = (page - 1) * limit;
     const { Op } = require('sequelize');
 
-    // Build where conditions cho Creator
-    const creatorWhere = {
-      specialties: {
-        [Op.contains]: ['callgirl'] // Tìm creator có specialty chứa 'callgirl'
-      }
-    };
-
-    // Filter theo booking price
-    if (minPrice || maxPrice) {
-      const priceFilter = {};
-      if (minPrice) {
-        priceFilter[Op.gte] = parseFloat(minPrice);
-      }
-      if (maxPrice) {
-        priceFilter[Op.lte] = parseFloat(maxPrice);
-      }
-      creatorWhere.bookingPrice = priceFilter;
-    }
-
-    // Filter theo verified status
-    if (isVerified !== undefined) {
-      creatorWhere.isVerified = isVerified === 'true';
-    }
-
-    // Filter theo availability
-    if (isAvailable !== undefined) {
-      creatorWhere.isAvailableForBooking = isAvailable === 'true';
-    }
-
     // Build where conditions cho User (city filter)
     const userWhere = {
       role: 'creator',
@@ -599,6 +570,38 @@ const getCallgirlCreators = async (req, res, next) => {
       userWhere.city = {
         [Op.iLike]: `%${city}%`
       };
+    }
+
+    // Build where conditions cho Creator - dùng raw query để tránh lỗi JSON
+    let creatorWhereClause = `"Creator"."specialties"::text LIKE '%"callgirl"%'`;
+    const replacements = {};
+    let paramIndex = 1;
+
+    // Filter theo booking price
+    if (minPrice) {
+      creatorWhereClause += ` AND "Creator"."bookingPrice" >= :minPrice${paramIndex}`;
+      replacements[`minPrice${paramIndex}`] = parseFloat(minPrice);
+      paramIndex++;
+    }
+    
+    if (maxPrice) {
+      creatorWhereClause += ` AND "Creator"."bookingPrice" <= :maxPrice${paramIndex}`;
+      replacements[`maxPrice${paramIndex}`] = parseFloat(maxPrice);
+      paramIndex++;
+    }
+
+    // Filter theo verified status
+    if (isVerified !== undefined) {
+      creatorWhereClause += ` AND "Creator"."isVerified" = :isVerified${paramIndex}`;
+      replacements[`isVerified${paramIndex}`] = isVerified === 'true';
+      paramIndex++;
+    }
+
+    // Filter theo availability
+    if (isAvailable !== undefined) {
+      creatorWhereClause += ` AND "Creator"."isAvailableForBooking" = :isAvailable${paramIndex}`;
+      replacements[`isAvailable${paramIndex}`] = isAvailable === 'true';
+      paramIndex++;
     }
 
     // Define sort options
@@ -624,7 +627,8 @@ const getCallgirlCreators = async (req, res, next) => {
     }
 
     const { count, rows } = await Creator.findAndCountAll({
-      where: creatorWhere,
+      where: require('sequelize').literal(creatorWhereClause),
+      replacements: replacements,
       include: [
         {
           model: User,
