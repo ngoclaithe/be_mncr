@@ -569,13 +569,14 @@ const getCallgirlCreators = async (req, res, next) => {
 
     // Filter theo booking price
     if (minPrice || maxPrice) {
-      creatorWhere.bookingPrice = {};
+      const priceFilter = {};
       if (minPrice) {
-        creatorWhere.bookingPrice[Op.gte] = parseFloat(minPrice);
+        priceFilter[Op.gte] = parseFloat(minPrice);
       }
       if (maxPrice) {
-        creatorWhere.bookingPrice[Op.lte] = parseFloat(maxPrice);
+        priceFilter[Op.lte] = parseFloat(maxPrice);
       }
+      creatorWhere.bookingPrice = priceFilter;
     }
 
     // Filter theo verified status
