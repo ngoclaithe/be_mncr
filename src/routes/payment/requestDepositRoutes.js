@@ -18,7 +18,7 @@ router.route('/')
 // Get, update status, or delete specific deposit request by ID
 router.route('/:id')
   .get(requestDepositController.getRequestById) 
-  .patch(
+  .put(
     authorize('admin'),
     updateRequestDepositValidator,
     requestDepositController.updateRequestStatus
