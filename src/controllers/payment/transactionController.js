@@ -480,7 +480,7 @@ const getTransactionSummary = async (req, res, next) => {
 
     const summary = await Transaction.findAll({
       where: {
-        [sequelize.Op.or]: [
+        [Op.or]: [
           { fromUserId: userId },
           { toUserId: userId }
         ]
