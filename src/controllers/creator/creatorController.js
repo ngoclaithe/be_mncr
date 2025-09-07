@@ -134,14 +134,21 @@ const getCreators = async (req, res, next) => {
 const getCreatorById = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const currentUserId = req.user?.id; // Lấy userId từ req.user nếu có
+    const currentUser = req.user; // Lấy user object từ req.user
+    const currentUserId = currentUser?.id;
+    const isAdmin = currentUser?.role === 'admin';
+
+    // Xác định attributes cho User dựa trên role
+    const userAttributes = isAdmin 
+      ? ['id', 'username', 'firstName', 'lastName', 'avatar', 'city', 'isOnline', 'email', 'phoneNumber', 'dateOfBirth', 'gender', 'country', 'timezone', 'language', 'tokens', 'totalSpent', 'affiliateCode', 'referredBy', 'isActive', 'isEmailVerified', 'lastLogin', 'registrationDate', 'createdAt', 'updatedAt']
+      : ['id', 'username', 'firstName', 'lastName', 'avatar', 'city', 'isOnline'];
 
     const creator = await Creator.findByPk(id, {
       include: [
         {
           model: User,
           as: 'user',
-          attributes: ['id', 'username', 'firstName', 'lastName', 'avatar', 'city', 'isOnline']
+          attributes: userAttributes
         },
         {
           model: Follow,
@@ -196,25 +203,23 @@ const getCreatorById = async (req, res, next) => {
       });
     }
 
-    // Kiểm tra xem user hiện tại đã follow creator này chưa (nếu có userId)
-    let isFollowing = false;
-    if (currentUserId) {
+    // Transform data to include userId at top level, followersCount
+    const transformedCreator = {
+      ...creator.toJSON(),
+      userId: creator.user.id,
+      followersCount: parseInt(creator.dataValues.followersCount) || 0
+    };
+
+    // Chỉ kiểm tra isFollowing nếu không phải admin và có currentUserId
+    if (!isAdmin && currentUserId) {
       const followRecord = await Follow.findOne({
         where: {
           followerId: currentUserId,
           creatorId: creator.id
         }
       });
-      isFollowing = !!followRecord;
+      transformedCreator.isFollowing = !!followRecord;
     }
-
-    // Transform data to include userId at top level, followersCount và isFollowing
-    const transformedCreator = {
-      ...creator.toJSON(),
-      userId: creator.user.id,
-      followersCount: parseInt(creator.dataValues.followersCount) || 0,
-      isFollowing // Thêm trường này vào response
-    };
 
     res.status(StatusCodes.OK).json({
       success: true,
