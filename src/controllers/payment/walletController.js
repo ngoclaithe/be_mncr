@@ -12,7 +12,7 @@ const getWallet = async (req, res, next) => {
   try {
     const wallet = await Wallet.findOne({
       where: { userId: req.user.id },
-      attributes: ['balance', 'token', 'updatedAt'],
+      attributes: ['balance', 'tokens', 'updatedAt'],
     });
 
     if (!wallet) {
