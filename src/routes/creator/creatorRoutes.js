@@ -30,7 +30,7 @@ router.get('/live', creatorController.getLiveCreators);
 // @route   GET /api/v1/creators/:id
 // @desc    Get a single creator by ID
 // @access  Public
-router.get('/:id', optionalAuth, creatorController.getCreatorById);
+router.get('/:id', optionalAuth(), creatorController.getCreatorById);
 
 // Follow routes (protected)
 router.use('/me', protect, followRoutes);
