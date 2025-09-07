@@ -130,7 +130,7 @@ let authRoutes,
   streamRoutes,
   userFollowRoutes,
   infoPaymentRoutes,
-  requestDepositRoutes,
+  transactionRoutes,
   walletRoutes,
   streamPackageRoutes,
   creatorPackageSubscriptionRoutes,
@@ -156,7 +156,7 @@ try {
   streamRoutes = require('./routes/streaming/streamRoutes');
   userFollowRoutes = require('./routes/user/followRoutes');
   infoPaymentRoutes = require('./routes/payment/infoPaymentRoutes');
-  requestDepositRoutes = require('./routes/payment/requestDepositRoutes');
+  transactionRoutes = require('./routes/payment/transactionRoutes');
   walletRoutes = require('./routes/wallet/walletRoutes');
   streamPackageRoutes = require('./routes/package/streamPackageRoutes');
   creatorPackageSubscriptionRoutes = require('./routes/package/creatorPackageSubscriptionRoutes');
@@ -185,7 +185,7 @@ app.use('/api/v2/reactions', reactionRoutes);
 app.use('/api/v2/streams', streamRoutes);
 app.use('/api/v2/user-follows', userFollowRoutes);
 app.use('/api/v2/info-payments', infoPaymentRoutes);
-app.use('/api/v2/request-deposits', requestDepositRoutes);
+app.use('/api/v2/transactions', transactionRoutes);
 app.use('/api/v2/wallet', walletRoutes);
 app.use('/api/v2/stream-packages', streamPackageRoutes);
 app.use('/api/v2/subscriptions', creatorPackageSubscriptionRoutes);
