@@ -32,7 +32,6 @@ const Admin = sequelize.define('Admin', {
   permissions: {
     type: DataTypes.JSON,
     defaultValue: {}
-    // ví dụ: { canBanUser: true, canApprovePayout: false }
   },
 
   lastLoginAt: {
@@ -41,7 +40,7 @@ const Admin = sequelize.define('Admin', {
   },
 
   lastLoginIp: {
-    type: DataTypes.STRING, // IPv4 hoặc IPv6
+    type: DataTypes.STRING,
     allowNull: true
   },
 

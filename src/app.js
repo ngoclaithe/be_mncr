@@ -141,7 +141,8 @@ let authRoutes,
   giftRoutes,
   bookingRoutes,
   reviewRoutes,
-  searchRoutes
+  searchRoutes,
+  reportRoutes
 ;
 
 try {
@@ -168,6 +169,7 @@ try {
   bookingRoutes = require('./routes/booking/bookingRoutes');
   reviewRoutes = require('./routes/booking/reviewRoutes');
   searchRoutes = require('./routes/search/searchRoutes');
+  reportRoutes = require('./routes/support/reportRoutes');
 } catch (error) {
   logger.error('Error importing routes:', error);
   process.exit(1);
@@ -197,6 +199,7 @@ app.use('/api/v2/stream-gifts', giftRoutes);
 app.use('/api/v2/bookings', bookingRoutes);
 app.use('/api/v2/reviews', reviewRoutes);
 app.use('/api/v2/search', searchRoutes);
+app.use('/api/v2/reports', reportRoutes);
 
 // app.use(notFound);
 // app.use(errorHandler);
