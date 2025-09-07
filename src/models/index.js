@@ -29,7 +29,6 @@ const Share = require('./Share');
 const Story = require('./Story');
 const StoryView = require('./StoryView');
 const InfoPayment = require('./InfoPayment');
-const RequestDeposit = require('./RequestDeposit');
 const Admin = require('./Admin');
 const Conversation = require('./Conversation');
 
@@ -134,11 +133,6 @@ function setupAssociations() {
       User.hasMany(AffiliateCommission, {
         foreignKey: 'referredUserId',
         as: 'referralCommissions'
-      });
-
-      User.hasMany(RequestDeposit, {
-        foreignKey: 'userId',
-        as: 'requestDeposits'
       });
 
       // User tự refer lẫn nhau
@@ -343,13 +337,13 @@ function setupAssociations() {
       // Transaction từ User gửi
       Transaction.belongsTo(User, {
         foreignKey: 'fromUserId',
-        as: 'sender'
+        as: 'fromUser'
       });
 
       // Transaction đến User nhận
       Transaction.belongsTo(User, {
         foreignKey: 'toUserId',
-        as: 'receiver'
+        as: 'toUser'
       });
 
       // Transaction liên quan đến booking
@@ -362,6 +356,35 @@ function setupAssociations() {
       Transaction.belongsTo(Stream, {
         foreignKey: 'streamId',
         as: 'stream'
+      });
+
+      // Transaction liên quan đến subscription
+      Transaction.belongsTo(Subscription, {
+        foreignKey: 'subscriptionId',
+        as: 'subscription'
+      });
+
+      // Transaction liên quan đến InfoPayment (cho deposit)
+      Transaction.belongsTo(InfoPayment, {
+        foreignKey: 'infoPaymentId',
+        as: 'infoPayment'
+      });
+
+      // Transaction có thể có parent transaction (cho commission/refund)
+      Transaction.belongsTo(Transaction, {
+        foreignKey: 'parentTransactionId',
+        as: 'parentTransaction'
+      });
+
+      Transaction.hasMany(Transaction, {
+        foreignKey: 'parentTransactionId',
+        as: 'childTransactions'
+      });
+
+      // Transaction được process bởi admin
+      Transaction.belongsTo(User, {
+        foreignKey: 'processedBy',
+        as: 'processor'
       });
 
       // Transaction có affiliate commission
@@ -432,6 +455,7 @@ function setupAssociations() {
         foreignKey: 'receiverId',
         as: 'receiver'
       });
+
       Message.belongsTo(Conversation, {
         foreignKey: 'conversationId',
         as: 'conversation'
@@ -441,6 +465,7 @@ function setupAssociations() {
       console.error('Error setting up Message relationships:', error.message);
       throw error;
     }
+
     // ==================== CONVERSATION RELATIONSHIPS ====================
     try {
       // Conversation giữa 2 user
@@ -470,6 +495,7 @@ function setupAssociations() {
       console.error('Error setting up Conversation relationships:', error.message);
       throw error;
     }
+
     // ==================== CHAT RELATIONSHIPS ====================
     try {
       // Chat thuộc về Stream
@@ -558,6 +584,12 @@ function setupAssociations() {
       Subscription.belongsTo(Creator, {
         foreignKey: 'creatorId',
         as: 'creator'
+      });
+
+      // Subscription có nhiều transaction
+      Subscription.hasMany(Transaction, {
+        foreignKey: 'subscriptionId',
+        as: 'transactions'
       });
 
     } catch (error) {
@@ -850,34 +882,20 @@ function setupAssociations() {
       console.error('Error setting up StoryView relationships:', error.message);
       throw error;
     }
+
     try {
-      // InfoPayment RELATIONSHIPS
-      InfoPayment.hasMany(RequestDeposit, {
+      // InfoPayment RELATIONSHIPS - Updated to work with Transaction instead of RequestDeposit
+      InfoPayment.hasMany(Transaction, {
         foreignKey: 'infoPaymentId',
-        as: 'requestDeposit'
+        as: 'transactions'
       });
 
     } catch (error) {
       console.error('Error setting up InfoPayment relationships:', error.message);
       throw error;
     }
-    try {
-      // Request Deposit RELATIONSHIPS
-      RequestDeposit.belongsTo(User, {
-        foreignKey: 'userId',
-        as: 'user'
-      });
 
-      RequestDeposit.belongsTo(InfoPayment, {
-        foreignKey: 'infoPaymentId',
-        as: 'infoPayment'
-      });
-
-    } catch (error) {
-      console.error('Error setting up RequestDeposit relationships:', error.message);
-      throw error;
-    }
-    //quan hệ admin và user
+    // Admin relationships
     try {
       // Admin thuộc về 1 User
       Admin.belongsTo(User, {
@@ -885,11 +903,16 @@ function setupAssociations() {
         as: 'user'
       });
 
+      // Admin process transactions
+      Admin.hasMany(Transaction, {
+        foreignKey: 'processedBy',
+        as: 'processedTransactions'
+      });
+
     } catch (error) {
       console.error('Error setting up Admin relationships:', error.message);
       throw error;
     }
-
 
     return true;
 
@@ -899,6 +922,7 @@ function setupAssociations() {
     return false;
   }
 }
+
 async function initModels() {
   try {
 
@@ -942,7 +966,6 @@ async function initModels() {
     return false;
   }
 }
-
 
 async function closeDatabase() {
   try {
@@ -995,7 +1018,6 @@ module.exports = {
   Story,
   StoryView,
   InfoPayment,
-  RequestDeposit,
   Admin,
   initModels,
   setupAssociations,
