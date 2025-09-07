@@ -1,4 +1,4 @@
-const { RequestDeposit, InfoPayment, User, sequelize } = require('../../models');
+const { RequestDeposit, InfoPayment, User, Wallet, sequelize } = require('../../models');
 const { StatusCodes } = require('http-status-codes');
 const ApiError = require('../../utils/ApiError');
 const { validationResult } = require('express-validator');
@@ -18,6 +18,14 @@ const createRequest = async (req, res, next) => {
     const { amount, infoPaymentId, codePay, metadata } = req.body;
     const userId = req.user.id;
 
+    console.log('Creating deposit request:', {
+      userId,
+      amount,
+      infoPaymentId,
+      codePay,
+      metadata
+    });
+
     const newRequest = await RequestDeposit.create({
       userId,
       amount,
@@ -28,12 +36,15 @@ const createRequest = async (req, res, next) => {
       createdAt: new Date(),
     });
 
+    console.log('Deposit request created successfully:', newRequest.toJSON());
+
     res.status(StatusCodes.CREATED).json({
       success: true,
       message: 'Deposit request created successfully. Please wait for admin approval.',
       data: newRequest,
     });
   } catch (error) {
+    console.error('Error creating deposit request:', error);
     next(error);
   }
 };
@@ -59,6 +70,13 @@ const getRequests = async (req, res, next) => {
       whereClause.status = status;
     }
 
+    console.log('Getting deposit requests with filters:', {
+      whereClause,
+      page,
+      limit,
+      userRole: req.user.role
+    });
+
     const { count, rows } = await RequestDeposit.findAndCountAll({
       where: whereClause,
       include: [
@@ -69,6 +87,8 @@ const getRequests = async (req, res, next) => {
       offset: parseInt(offset),
       order: [['createdAt', 'DESC']],
     });
+
+    console.log(`Found ${count} deposit requests`);
 
     res.status(StatusCodes.OK).json({
       success: true,
@@ -81,6 +101,7 @@ const getRequests = async (req, res, next) => {
       },
     });
   } catch (error) {
+    console.error('Error getting deposit requests:', error);
     next(error);
   }
 };
@@ -93,6 +114,8 @@ const getRequests = async (req, res, next) => {
 const getRequestById = async (req, res, next) => {
   try {
     const { id } = req.params;
+    console.log('Getting deposit request by ID:', id);
+
     const request = await RequestDeposit.findByPk(id, {
       include: [
         { model: User, as: 'user', attributes: ['id', 'username', 'firstName', 'lastName'] },
@@ -101,6 +124,7 @@ const getRequestById = async (req, res, next) => {
     });
 
     if (!request) {
+      console.log('Deposit request not found:', id);
       return res.status(StatusCodes.OK).json({
         success: true,
         data: null,
@@ -109,14 +133,22 @@ const getRequestById = async (req, res, next) => {
     }
 
     if (req.user.role !== 'admin' && request.userId !== req.user.id) {
+      console.log('Unauthorized access attempt:', {
+        requestUserId: request.userId,
+        currentUserId: req.user.id,
+        userRole: req.user.role
+      });
       return next(new ApiError('You are not authorized to view this request', StatusCodes.FORBIDDEN));
     }
+
+    console.log('Deposit request found:', request.toJSON());
 
     res.status(StatusCodes.OK).json({
       success: true,
       data: request,
     });
   } catch (error) {
+    console.error('Error getting deposit request by ID:', error);
     next(error);
   }
 };
@@ -136,29 +168,100 @@ const updateRequestStatus = async (req, res, next) => {
   const { status, metadata } = req.body;
 
   try {
+    console.log('Updating deposit request status:', {
+      requestId: id,
+      newStatus: status,
+      metadata,
+      adminId: req.user.id
+    });
+
     const request = await RequestDeposit.findByPk(id);
 
     if (!request) {
+      console.log('Deposit request not found:', id);
       return next(new ApiError('Deposit request not found', StatusCodes.NOT_FOUND));
     }
 
     if (request.status !== 'pending') {
+      console.log('Cannot update non-pending request:', {
+        requestId: id,
+        currentStatus: request.status,
+        attemptedStatus: status
+      });
       return next(new ApiError(`Cannot update a request that is already ${request.status}`, StatusCodes.BAD_REQUEST));
     }
 
+    console.log('Processing status update for request:', request.toJSON());
+
     const result = await sequelize.transaction(async (t) => {
+      // Update request status
       request.status = status;
       request.metadata = metadata || request.metadata;
       await request.save({ transaction: t });
 
-      if (status === 'completed') {
-        const user = await User.findByPk(request.userId, { transaction: t });
-        if (!user) {
-          throw new ApiError('User associated with this request not found.', StatusCodes.NOT_FOUND);
+      console.log('Request status updated successfully:', {
+        requestId: id,
+        newStatus: status,
+        amount: request.amount
+      });
+
+      // If approved/completed, update wallet tokens
+      if (status === 'completed' || status === 'approved') {
+        console.log('Processing wallet update for completed/approved request...');
+        
+        // Find or create user wallet
+        let wallet = await Wallet.findOne({ 
+          where: { userId: request.userId },
+          transaction: t 
+        });
+
+        if (!wallet) {
+          console.log('Creating new wallet for user:', request.userId);
+          wallet = await Wallet.create({ 
+            userId: request.userId,
+            balance: 0,
+            tokens: 0
+          }, { transaction: t });
         }
-        await user.increment('balance', { by: request.amount, transaction: t });
+
+        // Calculate tokens (1000 VND = 1 token)
+        const tokensToAdd = Math.floor(request.amount / 1000);
+        const previousTokens = wallet.tokens;
+        const previousTotalDeposited = wallet.totalDeposited;
+
+        console.log('Token calculation:', {
+          depositAmount: request.amount,
+          tokensToAdd,
+          previousTokens,
+          newTokens: previousTokens + tokensToAdd
+        });
+
+        // Update wallet tokens and total deposited
+        await wallet.increment({
+          tokens: tokensToAdd,
+          totalDeposited: request.amount
+        }, { transaction: t });
+
+        // Fetch updated wallet data
+        await wallet.reload({ transaction: t });
+
+        console.log('Wallet updated successfully:', {
+          userId: request.userId,
+          previousTokens,
+          tokensAdded: tokensToAdd,
+          newTokens: wallet.tokens,
+          previousTotalDeposited,
+          newTotalDeposited: wallet.totalDeposited,
+          depositAmount: request.amount
+        });
       }
+
       return request;
+    });
+
+    console.log('Transaction completed successfully:', {
+      requestId: id,
+      finalStatus: result.status
     });
 
     res.status(StatusCodes.OK).json({
@@ -167,6 +270,7 @@ const updateRequestStatus = async (req, res, next) => {
       data: result,
     });
   } catch (error) {
+    console.error('Error updating deposit request status:', error);
     next(error);
   }
 };
@@ -179,23 +283,35 @@ const updateRequestStatus = async (req, res, next) => {
 const deleteRequest = async (req, res, next) => {
   try {
     const { id } = req.params;
+    console.log('Deleting deposit request:', {
+      requestId: id,
+      adminId: req.user.id
+    });
+
     const request = await RequestDeposit.findByPk(id);
 
     if (!request) {
+      console.log('Deposit request not found for deletion:', id);
       return next(new ApiError('Deposit request not found', StatusCodes.NOT_FOUND));
     }
 
     if (request.status === 'completed') {
+      console.log('Cannot delete completed request:', {
+        requestId: id,
+        status: request.status
+      });
       return next(new ApiError('Cannot delete a completed request.', StatusCodes.BAD_REQUEST));
     }
 
     await request.destroy();
+    console.log('Deposit request deleted successfully:', id);
 
     res.status(StatusCodes.OK).json({
       success: true,
       message: 'Deposit request deleted successfully.',
     });
   } catch (error) {
+    console.error('Error deleting deposit request:', error);
     next(error);
   }
 };
