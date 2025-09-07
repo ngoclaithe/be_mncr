@@ -134,6 +134,7 @@ const getCreators = async (req, res, next) => {
 const getCreatorById = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const currentUserId = req.user?.id; // Lấy userId từ req.user nếu có
 
     const creator = await Creator.findByPk(id, {
       include: [
@@ -195,11 +196,24 @@ const getCreatorById = async (req, res, next) => {
       });
     }
 
-    // Transform data to include userId at top level and followersCount
+    // Kiểm tra xem user hiện tại đã follow creator này chưa (nếu có userId)
+    let isFollowing = false;
+    if (currentUserId) {
+      const followRecord = await Follow.findOne({
+        where: {
+          followerId: currentUserId,
+          followedId: creator.id // hoặc có thể dùng creator.user.id
+        }
+      });
+      isFollowing = !!followRecord;
+    }
+
+    // Transform data to include userId at top level, followersCount và isFollowing
     const transformedCreator = {
       ...creator.toJSON(),
       userId: creator.user.id,
-      followersCount: parseInt(creator.dataValues.followersCount) || 0
+      followersCount: parseInt(creator.dataValues.followersCount) || 0,
+      isFollowing // Thêm trường này vào response
     };
 
     res.status(StatusCodes.OK).json({
@@ -210,7 +224,6 @@ const getCreatorById = async (req, res, next) => {
     next(error);
   }
 };
-
 /**
  * @desc    Get verified creators
  * @route   GET /api/v1/creators/verified
