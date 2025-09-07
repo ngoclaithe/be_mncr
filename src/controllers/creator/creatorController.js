@@ -55,7 +55,7 @@ const getCreators = async (req, res, next) => {
             role: 'creator',
             isActive: true,
           },
-          attributes: ['id', 'username', 'firstName', 'lastName', 'avatar']
+          attributes: ['id', 'username', 'firstName', 'lastName', 'avatar', 'city']
         },
         {
           model: Follow,
@@ -141,7 +141,7 @@ const getCreatorById = async (req, res, next) => {
         {
           model: User,
           as: 'user',
-          attributes: ['id', 'username', 'firstName', 'lastName', 'avatar', 'isOnline']
+          attributes: ['id', 'username', 'firstName', 'lastName', 'avatar', 'city', 'isOnline']
         },
         {
           model: Follow,
@@ -246,7 +246,7 @@ const getVerifiedCreators = async (req, res, next) => {
           role: 'creator',
           isActive: true,
         },
-        attributes: ['id', 'username', 'firstName', 'lastName', 'avatar']
+        attributes: ['id', 'username', 'firstName', 'lastName', 'avatar', 'city']
       }],
       attributes: [
         'id',
@@ -318,7 +318,7 @@ const getLiveCreators = async (req, res, next) => {
           role: 'creator',
           isActive: true,
         },
-        attributes: ['id', 'username', 'firstName', 'lastName', 'avatar', 'isOnline']
+        attributes: ['id', 'username', 'firstName', 'lastName', 'avatar', 'city', 'isOnline']
       }],
       attributes: [
         'id',
@@ -420,7 +420,7 @@ const searchCreators = async (req, res, next) => {
           role: 'creator',
           isActive: true,
         },
-        attributes: ['id', 'username', 'firstName', 'lastName', 'avatar']
+        attributes: ['id', 'username', 'firstName', 'lastName', 'avatar', 'city']
       }],
       attributes: [
         'id',
@@ -487,7 +487,7 @@ const getFeaturedCreators = async (req, res, next) => {
             role: 'creator',
             isActive: true,
           },
-          attributes: ['id', 'username', 'firstName', 'lastName', 'avatar']
+          attributes: ['id', 'username', 'firstName', 'lastName', 'avatar', 'city']
         },
         {
           model: Follow,
