@@ -39,7 +39,7 @@ const validateDeposit = [
 
 const validateWithdraw = [
   body('amount')
-    .isFloat({ min: 10000 })
+    .isFloat({ min: 10 })
     .withMessage('Minimum withdrawal amount is 10,000 VND'),
   body('paymentMethod')
     .isIn(['bank_transfer', 'momo', 'zalopay'])
