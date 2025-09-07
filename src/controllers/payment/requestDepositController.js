@@ -315,6 +315,7 @@ const updateRequestStatus = async (req, res, next) => {
  * @access  Private (Admin)
  */
 const deleteRequest = async (req, res, next) => {
+  console.log('🚀 deleteRequest FUNCTION CALLED!');
   try {
     const { id } = req.params;
     console.log('Deleting deposit request:', {
