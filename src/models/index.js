@@ -884,7 +884,7 @@ function setupAssociations() {
     }
 
     try {
-      // InfoPayment RELATIONSHIPS - Updated to work with Transaction instead of RequestDeposit
+      // InfoPayment RELATIONSHIPS
       InfoPayment.hasMany(Transaction, {
         foreignKey: 'infoPaymentId',
         as: 'transactions'
