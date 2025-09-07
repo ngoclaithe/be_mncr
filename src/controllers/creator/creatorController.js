@@ -202,7 +202,7 @@ const getCreatorById = async (req, res, next) => {
       const followRecord = await Follow.findOne({
         where: {
           followerId: currentUserId,
-          followedId: creator.id // hoặc có thể dùng creator.user.id
+          creatorId: creator.id
         }
       });
       isFollowing = !!followRecord;
