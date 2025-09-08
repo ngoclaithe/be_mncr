@@ -734,6 +734,12 @@ const getCallgirlCreators = async (req, res, next) => {
  */
 const updateCreator = async (req, res, next) => {
   const errors = validationResult(req);
+  console.log('=== DEBUG UPDATE CREATOR ===');
+  console.log('Request Body:', JSON.stringify(req.body, null, 2));
+  console.log('Request Params:', req.params);
+  console.log('Current User:', req.user);
+  console.log('=== END DEBUG UPDATE CREATOR ===');
+
   if (!errors.isEmpty()) {
     return res.status(StatusCodes.BAD_REQUEST).json({
       success: false,
