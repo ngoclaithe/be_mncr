@@ -212,17 +212,7 @@ const updateCreatorValidator = [
     .optional()
     .isFloat({ min: 30, max: 200 })
     .withMessage('Weight must be between 30 and 200 kg'),
-
-  body('eyeColor')
-    .optional()
-    .isIn(['brown', 'blue', 'green', 'hazel', 'gray', 'amber', 'other'])
-    .withMessage('Eye color must be one of: brown, blue, green, hazel, gray, amber, other'),
-
-  body('hairColor')
-    .optional()
-    .isIn(['black', 'brown', 'blonde', 'red', 'gray', 'white', 'other'])
-    .withMessage('Hair color must be one of: black, brown, blonde, red, gray, white, other'),
-
+    
   body('service')
     .optional()
     .isArray()
