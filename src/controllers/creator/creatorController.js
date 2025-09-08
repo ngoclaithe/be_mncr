@@ -733,26 +733,37 @@ const getCallgirlCreators = async (req, res, next) => {
  * @access  Private (Creator/Admin)
  */
 const updateCreator = async (req, res, next) => {
+  console.log('=== 1. FUNCTION START ===');
+  
   const errors = validationResult(req);
-  console.log('=== DEBUG UPDATE CREATOR ===');
+  console.log('=== 2. DEBUG UPDATE CREATOR ===');
   console.log('Request Body:', JSON.stringify(req.body, null, 2));
   console.log('Request Params:', req.params);
   console.log('Current User:', req.user);
-  console.log('=== END DEBUG UPDATE CREATOR ===');
-
+  console.log('Has validation errors:', !errors.isEmpty());
+  
   if (!errors.isEmpty()) {
+    console.log('=== 3. VALIDATION ERRORS FOUND ===');
+    console.log('Validation errors:', JSON.stringify(errors.array(), null, 2));
     return res.status(StatusCodes.BAD_REQUEST).json({
       success: false,
       errors: errors.array()
     });
   }
 
+  console.log('=== 4. PASSED VALIDATION - ENTERING TRY BLOCK ===');
+
   try {
     const { id } = req.params;
     const currentUser = req.user;
     const isAdmin = currentUser?.role === 'admin';
 
+    console.log('=== 5. VARIABLES EXTRACTED ===');
+    console.log('Creator ID:', id);
+    console.log('Is Admin:', isAdmin);
+
     // Tìm creator cần update
+    console.log('=== 6. FINDING CREATOR ===');
     const creator = await Creator.findByPk(id, {
       include: [{
         model: User,
@@ -760,7 +771,16 @@ const updateCreator = async (req, res, next) => {
       }]
     });
 
+    console.log('=== 7. CREATOR FOUND RESULT ===');
+    console.log('Creator exists:', !!creator);
+    if (creator) {
+      console.log('Creator ID:', creator.id);
+      console.log('Creator userId:', creator.userId);
+      console.log('Creator stageName:', creator.stageName);
+    }
+
     if (!creator) {
+      console.log('=== 8. CREATOR NOT FOUND - RETURNING 404 ===');
       return res.status(StatusCodes.NOT_FOUND).json({
         success: false,
         message: 'Creator not found'
@@ -768,12 +788,20 @@ const updateCreator = async (req, res, next) => {
     }
 
     // Kiểm tra quyền: chỉ admin hoặc chính creator đó mới được update
+    console.log('=== 9. CHECKING AUTHORIZATION ===');
+    console.log('Current user ID:', currentUser.id);
+    console.log('Creator user ID:', creator.userId);
+    console.log('Authorization check:', isAdmin || currentUser.id === creator.userId);
+
     if (!isAdmin && currentUser.id !== creator.userId) {
+      console.log('=== 10. AUTHORIZATION FAILED - RETURNING 403 ===');
       return res.status(StatusCodes.FORBIDDEN).json({
         success: false,
         message: 'Not authorized to update this creator'
       });
     }
+
+    console.log('=== 11. AUTHORIZATION PASSED - EXTRACTING DATA ===');
 
     // Tách data cho User và Creator
     const {
@@ -825,6 +853,8 @@ const updateCreator = async (req, res, next) => {
       totalRatings
     } = req.body;
 
+    console.log('=== 12. DATA EXTRACTED - PREPARING USER UPDATE ===');
+
     // Prepare update data for User
     const userUpdateData = {};
     if (firstName !== undefined) userUpdateData.firstName = firstName;
@@ -837,6 +867,9 @@ const updateCreator = async (req, res, next) => {
     if (country !== undefined) userUpdateData.country = country;
     if (timezone !== undefined) userUpdateData.timezone = timezone;
     if (language !== undefined) userUpdateData.language = language;
+
+    console.log('=== 13. USER UPDATE DATA PREPARED ===');
+    console.log('User update data:', JSON.stringify(userUpdateData, null, 2));
 
     // Prepare update data for Creator
     const creatorUpdateData = {};
@@ -874,24 +907,49 @@ const updateCreator = async (req, res, next) => {
       if (totalRatings !== undefined) creatorUpdateData.totalRatings = totalRatings;
     }
 
+    console.log('=== 14. CREATOR UPDATE DATA PREPARED ===');
+    console.log('Creator update data:', JSON.stringify(creatorUpdateData, null, 2));
+    console.log('User update fields count:', Object.keys(userUpdateData).length);
+    console.log('Creator update fields count:', Object.keys(creatorUpdateData).length);
+
+    console.log('=== 15. STARTING TRANSACTION ===');
+
     // Sử dụng transaction để đảm bảo data consistency
     const result = await sequelize.transaction(async (t) => {
+      console.log('=== 16. INSIDE TRANSACTION ===');
+      
       // Update User nếu có data
       if (Object.keys(userUpdateData).length > 0) {
+        console.log('=== 17. UPDATING USER ===');
+        console.log('Updating user ID:', creator.userId);
+        console.log('User data to update:', userUpdateData);
+        
         await User.update(userUpdateData, {
           where: { id: creator.userId },
           transaction: t
         });
+        console.log('=== 18. USER UPDATE COMPLETED ===');
+      } else {
+        console.log('=== 17. SKIPPING USER UPDATE (no data) ===');
       }
 
       // Update Creator nếu có data
       if (Object.keys(creatorUpdateData).length > 0) {
+        console.log('=== 19. UPDATING CREATOR ===');
+        console.log('Updating creator ID:', creator.id);
+        console.log('Creator data to update:', creatorUpdateData);
+        
         await Creator.update(creatorUpdateData, {
           where: { id: creator.id },
           transaction: t
         });
+        console.log('=== 20. CREATOR UPDATE COMPLETED ===');
+      } else {
+        console.log('=== 19. SKIPPING CREATOR UPDATE (no data) ===');
       }
 
+      console.log('=== 21. FETCHING UPDATED CREATOR ===');
+      
       // Lấy updated data
       const updatedCreator = await Creator.findByPk(id, {
         include: [{
@@ -904,8 +962,13 @@ const updateCreator = async (req, res, next) => {
         transaction: t
       });
 
+      console.log('=== 22. UPDATED CREATOR FETCHED ===');
+      console.log('Updated creator exists:', !!updatedCreator);
+
       return updatedCreator;
     });
+
+    console.log('=== 23. TRANSACTION COMPLETED ===');
 
     // Transform response data
     const transformedCreator = {
@@ -913,15 +976,26 @@ const updateCreator = async (req, res, next) => {
       userId: result.user.id
     };
 
+    console.log('=== 24. DATA TRANSFORMED - SENDING RESPONSE ===');
+
     res.status(StatusCodes.OK).json({
       success: true,
       message: 'Creator updated successfully',
       data: transformedCreator
     });
 
+    console.log('=== 25. RESPONSE SENT SUCCESSFULLY ===');
+
   } catch (error) {
+    console.log('=== 26. ERROR CAUGHT ===');
+    console.log('Error name:', error.name);
+    console.log('Error message:', error.message);
+    console.log('Error stack:', error.stack);
+    
     // Xử lý specific errors
     if (error.name === 'SequelizeUniqueConstraintError') {
+      console.log('=== 27. UNIQUE CONSTRAINT ERROR ===');
+      console.log('Constraint details:', error.errors);
       return res.status(StatusCodes.BAD_REQUEST).json({
         success: false,
         message: 'Username or email already exists'
@@ -929,6 +1003,8 @@ const updateCreator = async (req, res, next) => {
     }
     
     if (error.name === 'SequelizeValidationError') {
+      console.log('=== 28. SEQUELIZE VALIDATION ERROR ===');
+      console.log('Validation errors:', error.errors);
       return res.status(StatusCodes.BAD_REQUEST).json({
         success: false,
         message: 'Validation error',
@@ -939,6 +1015,7 @@ const updateCreator = async (req, res, next) => {
       });
     }
 
+    console.log('=== 29. FORWARDING ERROR TO NEXT() ===');
     next(error);
   }
 };
