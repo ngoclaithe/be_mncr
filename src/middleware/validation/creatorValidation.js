@@ -79,13 +79,6 @@ const removeFollowerValidator = [
 ];
 
 const updateCreatorValidator = [
-  // User fields validation
-  body('username')
-    .optional()
-    .isLength({ min: 3, max: 30 })
-    .withMessage('Username must be between 3 and 30 characters')
-    .matches(/^[a-zA-Z0-9_]+$/)
-    .withMessage('Username can only contain letters, numbers, and underscores'),
 
   body('firstName')
     .optional()
@@ -98,17 +91,6 @@ const updateCreatorValidator = [
     .isLength({ min: 1, max: 50 })
     .withMessage('Last name must be between 1 and 50 characters')
     .trim(),
-
-  body('email')
-    .optional()
-    .isEmail()
-    .withMessage('Please provide a valid email')
-    .normalizeEmail(),
-
-  body('phoneNumber')
-    .optional()
-    .isMobilePhone()
-    .withMessage('Please provide a valid phone number'),
 
   body('dateOfBirth')
     .optional()
