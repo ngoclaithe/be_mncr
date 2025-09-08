@@ -2,9 +2,9 @@ const express = require('express');
 const router = express.Router();
 const creatorController = require('../../controllers/creator/creatorController');
 const followRoutes = require('./followRoutes');
-const { protect } = require('../../middleware/auth');
+const { protect, authorize } = require('../../middleware/auth');
 const { optionalAuth } = require('../../middleware/optionalAuth');
-const { getCreatorsValidator } = require('../../middleware/validation/creatorValidation');
+const { getCreatorsValidator, updateCreatorValidator } = require('../../middleware/validation/creatorValidation');
 
 // @route   GET /api/v2/creators
 // @desc    Get a list of all creators
@@ -36,6 +36,11 @@ router.get('/live', creatorController.getLiveCreators);
 // @desc    Get a single creator by ID
 // @access  Public
 router.get('/:id', optionalAuth(), creatorController.getCreatorById);
+
+// @route   PUT /api/v2/creators/:id
+// @desc    Update creator information
+// @access  Private (Creator/Admin)
+router.put('/:id', protect, authorize('creator', 'admin'), updateCreatorValidator, creatorController.updateCreator);
 
 // Follow routes (protected)
 router.use('/me', protect, followRoutes);

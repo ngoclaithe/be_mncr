@@ -1,4 +1,4 @@
-const { User, Creator, Follow } = require('../../models');
+const { User, Creator, Follow, sequelize } = require('../../models');
 const { StatusCodes } = require('http-status-codes');
 const { validationResult } = require('express-validator');
 
@@ -727,6 +727,217 @@ const getCallgirlCreators = async (req, res, next) => {
     next(error);
   }
 };
+/**
+ * @desc    Update creator information
+ * @route   PUT /api/v1/creators/:id
+ * @access  Private (Creator/Admin)
+ */
+const updateCreator = async (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(StatusCodes.BAD_REQUEST).json({
+      success: false,
+      errors: errors.array()
+    });
+  }
+
+  try {
+    const { id } = req.params;
+    const currentUser = req.user;
+    const isAdmin = currentUser?.role === 'admin';
+
+    // Tìm creator cần update
+    const creator = await Creator.findByPk(id, {
+      include: [{
+        model: User,
+        as: 'user'
+      }]
+    });
+
+    if (!creator) {
+      return res.status(StatusCodes.NOT_FOUND).json({
+        success: false,
+        message: 'Creator not found'
+      });
+    }
+
+    // Kiểm tra quyền: chỉ admin hoặc chính creator đó mới được update
+    if (!isAdmin && currentUser.id !== creator.userId) {
+      return res.status(StatusCodes.FORBIDDEN).json({
+        success: false,
+        message: 'Not authorized to update this creator'
+      });
+    }
+
+    // Tách data cho User và Creator
+    const {
+      // User fields
+      username,
+      firstName,
+      lastName,
+      avatar,
+      city,
+      email,
+      phoneNumber,
+      dateOfBirth,
+      gender,
+      country,
+      timezone,
+      language,
+      
+      // Creator fields
+      stageName,
+      titleBio,
+      bio,
+      bioUrls,
+      tags,
+      hourlyRate,
+      minBookingDuration,
+      maxConcurrentBookings,
+      availabilitySchedule,
+      bookingPrice,
+      subscriptionPrice,
+      specialties,
+      languages: creatorLanguages,
+      bodyType,
+      height,
+      weight,
+      measurement,
+      eyeColor,
+      service,
+      isTatto,
+      signature,
+      hairColor,
+      cosmeticSurgery,
+      isAvailableForBooking,
+      
+      // Admin only fields
+      isVerified,
+      isLive,
+      totalEarnings,
+      rating,
+      totalRatings
+    } = req.body;
+
+    // Prepare update data for User
+    const userUpdateData = {};
+    if (username !== undefined) userUpdateData.username = username;
+    if (firstName !== undefined) userUpdateData.firstName = firstName;
+    if (lastName !== undefined) userUpdateData.lastName = lastName;
+    if (avatar !== undefined) userUpdateData.avatar = avatar;
+    if (city !== undefined) userUpdateData.city = city;
+    if (email !== undefined) userUpdateData.email = email;
+    if (phoneNumber !== undefined) userUpdateData.phoneNumber = phoneNumber;
+    if (dateOfBirth !== undefined) userUpdateData.dateOfBirth = dateOfBirth;
+    if (gender !== undefined) userUpdateData.gender = gender;
+    if (country !== undefined) userUpdateData.country = country;
+    if (timezone !== undefined) userUpdateData.timezone = timezone;
+    if (language !== undefined) userUpdateData.language = language;
+
+    // Prepare update data for Creator
+    const creatorUpdateData = {};
+    if (stageName !== undefined) creatorUpdateData.stageName = stageName;
+    if (titleBio !== undefined) creatorUpdateData.titleBio = titleBio;
+    if (bio !== undefined) creatorUpdateData.bio = bio;
+    if (bioUrls !== undefined) creatorUpdateData.bioUrls = bioUrls;
+    if (tags !== undefined) creatorUpdateData.tags = tags;
+    if (hourlyRate !== undefined) creatorUpdateData.hourlyRate = hourlyRate;
+    if (minBookingDuration !== undefined) creatorUpdateData.minBookingDuration = minBookingDuration;
+    if (maxConcurrentBookings !== undefined) creatorUpdateData.maxConcurrentBookings = maxConcurrentBookings;
+    if (availabilitySchedule !== undefined) creatorUpdateData.availabilitySchedule = availabilitySchedule;
+    if (bookingPrice !== undefined) creatorUpdateData.bookingPrice = bookingPrice;
+    if (subscriptionPrice !== undefined) creatorUpdateData.subscriptionPrice = subscriptionPrice;
+    if (specialties !== undefined) creatorUpdateData.specialties = specialties;
+    if (creatorLanguages !== undefined) creatorUpdateData.languages = creatorLanguages;
+    if (bodyType !== undefined) creatorUpdateData.bodyType = bodyType;
+    if (height !== undefined) creatorUpdateData.height = height;
+    if (weight !== undefined) creatorUpdateData.weight = weight;
+    if (measurement !== undefined) creatorUpdateData.measurement = measurement;
+    if (eyeColor !== undefined) creatorUpdateData.eyeColor = eyeColor;
+    if (service !== undefined) creatorUpdateData.service = service;
+    if (isTatto !== undefined) creatorUpdateData.isTatto = isTatto;
+    if (signature !== undefined) creatorUpdateData.signature = signature;
+    if (hairColor !== undefined) creatorUpdateData.hairColor = hairColor;
+    if (cosmeticSurgery !== undefined) creatorUpdateData.cosmeticSurgery = cosmeticSurgery;
+    if (isAvailableForBooking !== undefined) creatorUpdateData.isAvailableForBooking = isAvailableForBooking;
+
+    // Admin only fields
+    if (isAdmin) {
+      if (isVerified !== undefined) creatorUpdateData.isVerified = isVerified;
+      if (isLive !== undefined) creatorUpdateData.isLive = isLive;
+      if (totalEarnings !== undefined) creatorUpdateData.totalEarnings = totalEarnings;
+      if (rating !== undefined) creatorUpdateData.rating = rating;
+      if (totalRatings !== undefined) creatorUpdateData.totalRatings = totalRatings;
+    }
+
+    // Sử dụng transaction để đảm bảo data consistency
+    const result = await sequelize.transaction(async (t) => {
+      // Update User nếu có data
+      if (Object.keys(userUpdateData).length > 0) {
+        await User.update(userUpdateData, {
+          where: { id: creator.userId },
+          transaction: t
+        });
+      }
+
+      // Update Creator nếu có data
+      if (Object.keys(creatorUpdateData).length > 0) {
+        await Creator.update(creatorUpdateData, {
+          where: { id: creator.id },
+          transaction: t
+        });
+      }
+
+      // Lấy updated data
+      const updatedCreator = await Creator.findByPk(id, {
+        include: [{
+          model: User,
+          as: 'user',
+          attributes: isAdmin 
+            ? ['id', 'username', 'firstName', 'lastName', 'avatar', 'city', 'isOnline', 'email', 'phoneNumber', 'dateOfBirth', 'gender', 'country', 'timezone', 'language', 'createdAt', 'updatedAt']
+            : ['id', 'username', 'firstName', 'lastName', 'avatar', 'city', 'isOnline']
+        }],
+        transaction: t
+      });
+
+      return updatedCreator;
+    });
+
+    // Transform response data
+    const transformedCreator = {
+      ...result.toJSON(),
+      userId: result.user.id
+    };
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      message: 'Creator updated successfully',
+      data: transformedCreator
+    });
+
+  } catch (error) {
+    // Xử lý specific errors
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: 'Username or email already exists'
+      });
+    }
+    
+    if (error.name === 'SequelizeValidationError') {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: 'Validation error',
+        errors: error.errors.map(err => ({
+          field: err.path,
+          message: err.message
+        }))
+      });
+    }
+
+    next(error);
+  }
+};
 
 module.exports = {
   getCreators,
@@ -735,5 +946,6 @@ module.exports = {
   getLiveCreators,
   searchCreators,
   getFeaturedCreators,
-  getCallgirlCreators
+  getCallgirlCreators,
+  updateCreator
 };
