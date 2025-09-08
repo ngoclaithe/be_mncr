@@ -778,6 +778,8 @@ const updateCreator = async (req, res, next) => {
     // Tách data cho User và Creator
     const {
       // User fields,
+      email,
+      username,
       firstName,
       lastName,
       avatar,
@@ -788,7 +790,7 @@ const updateCreator = async (req, res, next) => {
       country,
       timezone,
       language,
-      
+      referralCode,
       // Creator fields
       stageName,
       titleBio,
