@@ -121,8 +121,8 @@ const updateCreatorValidator = [
 
   body('language')
     .optional()
-    .isLength({ min: 2, max: 10 })
-    .withMessage('Language code must be between 2 and 10 characters'),
+    .isLength({ min: 1, max: 10 })
+    .withMessage('Language code must be between 1 and 10 characters'),
 
   // Creator fields validation
   body('stageName')
@@ -170,8 +170,8 @@ const updateCreatorValidator = [
 
   body('minBookingDuration')
     .optional()
-    .isInt({ min: 15 })
-    .withMessage('Minimum booking duration must be at least 15 minutes'),
+    .isInt({ min: 1 })
+    .withMessage('Minimum booking duration must be at least 1 minutes'),
 
   body('maxConcurrentBookings')
     .optional()
