@@ -771,13 +771,11 @@ const updateCreator = async (req, res, next) => {
 
     // Tách data cho User và Creator
     const {
-      // User fields
-      username,
+      // User fields,
       firstName,
       lastName,
       avatar,
       city,
-      email,
       phoneNumber,
       dateOfBirth,
       gender,
@@ -821,12 +819,10 @@ const updateCreator = async (req, res, next) => {
 
     // Prepare update data for User
     const userUpdateData = {};
-    if (username !== undefined) userUpdateData.username = username;
     if (firstName !== undefined) userUpdateData.firstName = firstName;
     if (lastName !== undefined) userUpdateData.lastName = lastName;
     if (avatar !== undefined) userUpdateData.avatar = avatar;
     if (city !== undefined) userUpdateData.city = city;
-    if (email !== undefined) userUpdateData.email = email;
     if (phoneNumber !== undefined) userUpdateData.phoneNumber = phoneNumber;
     if (dateOfBirth !== undefined) userUpdateData.dateOfBirth = dateOfBirth;
     if (gender !== undefined) userUpdateData.gender = gender;
