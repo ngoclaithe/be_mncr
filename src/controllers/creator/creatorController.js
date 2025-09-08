@@ -892,7 +892,7 @@ const updateCreator = async (req, res, next) => {
     if (measurement !== undefined) creatorUpdateData.measurement = measurement;
     if (eyeColor !== undefined) creatorUpdateData.eyeColor = eyeColor;
     if (service !== undefined) {
-      creatorUpdateData.service = Array.isArray(service) ? service.join(', ') : service;
+      creatorUpdateData.service = Array.isArray(service) ? service.join(' ') : service;
     } if (isTatto !== undefined) creatorUpdateData.isTatto = isTatto;
     if (signature !== undefined) creatorUpdateData.signature = signature;
     if (hairColor !== undefined) creatorUpdateData.hairColor = hairColor;
