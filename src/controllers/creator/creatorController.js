@@ -1018,22 +1018,7 @@ const getRelatedCreators = async (req, res, next) => {
 
     let allRelatedCreators = [];
     let searchDetails = [];
-
-    const baseWhereCondition = {
-      id: {
-        [Op.ne]: id // Loại trừ creator hiện tại
-      }
-    };
-
-    const includeConfig = [{
-      model: User,
-      as: 'user',
-      where: {
-        role: 'creator',
-        isActive: true
-      },
-      attributes: ['id', 'username', 'firstName', 'lastName', 'avatar', 'city']
-    }];
+    const usedCreatorIds = new Set([parseInt(id)]);
 
     const attributesConfig = [
       'id',
@@ -1056,23 +1041,40 @@ const getRelatedCreators = async (req, res, next) => {
     const orderConfig = [['rating', 'DESC']];
 
     // Ưu tiên 1: Tìm theo cả district và province (case insensitive)
-    if (currentPlaceOfOperation && currentPlaceOfOperation.district && currentPlaceOfOperation.province) {
+    if (allRelatedCreators.length < totalLimit && 
+        currentPlaceOfOperation && 
+        currentPlaceOfOperation.district && 
+        currentPlaceOfOperation.province) {
+      
+      const remainingLimit = totalLimit - allRelatedCreators.length;
+      
       const priority1Creators = await Creator.findAll({
         where: {
-          ...baseWhereCondition,
+          id: {
+            [Op.notIn]: Array.from(usedCreatorIds)
+          },
           [Op.and]: [
             require('sequelize').literal(`LOWER("Creator"."placeOfOperation"->>'province') = LOWER('${currentPlaceOfOperation.province.replace(/'/g, "''")}')`),
             require('sequelize').literal(`LOWER("Creator"."placeOfOperation"->>'district') = LOWER('${currentPlaceOfOperation.district.replace(/'/g, "''")}')`),
           ]
         },
-        include: includeConfig,
+        include: [{
+          model: User,
+          as: 'user',
+          where: {
+            role: 'creator',
+            isActive: true
+          },
+          attributes: ['id', 'username', 'firstName', 'lastName', 'avatar', 'city']
+        }],
         attributes: attributesConfig,
         order: orderConfig,
-        limit: totalLimit
+        limit: remainingLimit
       });
 
       if (priority1Creators.length > 0) {
         allRelatedCreators.push(...priority1Creators);
+        priority1Creators.forEach(creator => usedCreatorIds.add(creator.id));
         searchDetails.push({
           criteria: 'district_and_province',
           location: {
@@ -1084,22 +1086,31 @@ const getRelatedCreators = async (req, res, next) => {
       }
     }
 
-    // Ưu tiên 2: Nếu chưa đủ, tìm thêm theo province (case insensitive) - loại trừ những cái đã có
-    const remainingLimit = totalLimit - allRelatedCreators.length;
-    if (remainingLimit > 0 && currentPlaceOfOperation && currentPlaceOfOperation.province) {
-      const existingIds = allRelatedCreators.map(creator => creator.id);
+    // Ưu tiên 2: Tìm theo province (case insensitive) - chỉ những creator chưa được lấy
+    if (allRelatedCreators.length < totalLimit && 
+        currentPlaceOfOperation && 
+        currentPlaceOfOperation.province) {
+      
+      const remainingLimit = totalLimit - allRelatedCreators.length;
       
       const priority2Creators = await Creator.findAll({
         where: {
-          ...baseWhereCondition,
           id: {
-            [Op.notIn]: [...existingIds, id] // Loại trừ creator hiện tại và những cái đã lấy
+            [Op.notIn]: Array.from(usedCreatorIds)
           },
           [Op.and]: [
             require('sequelize').literal(`LOWER("Creator"."placeOfOperation"->>'province') = LOWER('${currentPlaceOfOperation.province.replace(/'/g, "''")}')`),
           ]
         },
-        include: includeConfig,
+        include: [{
+          model: User,
+          as: 'user',
+          where: {
+            role: 'creator',
+            isActive: true
+          },
+          attributes: ['id', 'username', 'firstName', 'lastName', 'avatar', 'city']
+        }],
         attributes: attributesConfig,
         order: orderConfig,
         limit: remainingLimit
@@ -1107,6 +1118,7 @@ const getRelatedCreators = async (req, res, next) => {
 
       if (priority2Creators.length > 0) {
         allRelatedCreators.push(...priority2Creators);
+        priority2Creators.forEach(creator => usedCreatorIds.add(creator.id));
         searchDetails.push({
           criteria: 'province_only',
           location: {
@@ -1117,16 +1129,14 @@ const getRelatedCreators = async (req, res, next) => {
       }
     }
 
-    // Ưu tiên 3: Nếu vẫn chưa đủ, tìm theo city của user (case insensitive)
-    const remainingLimit2 = totalLimit - allRelatedCreators.length;
-    if (remainingLimit2 > 0 && currentUserCity) {
-      const existingIds = allRelatedCreators.map(creator => creator.id);
+    // Ưu tiên 3: Tìm theo city của user (case insensitive)
+    if (allRelatedCreators.length < totalLimit && currentUserCity) {
+      const remainingLimit = totalLimit - allRelatedCreators.length;
 
       const priority3Creators = await Creator.findAll({
         where: {
-          ...baseWhereCondition,
           id: {
-            [Op.notIn]: [...existingIds, id]
+            [Op.notIn]: Array.from(usedCreatorIds)
           }
         },
         include: [{
@@ -1143,11 +1153,12 @@ const getRelatedCreators = async (req, res, next) => {
         }],
         attributes: attributesConfig,
         order: orderConfig,
-        limit: remainingLimit2
+        limit: remainingLimit
       });
 
       if (priority3Creators.length > 0) {
         allRelatedCreators.push(...priority3Creators);
+        priority3Creators.forEach(creator => usedCreatorIds.add(creator.id));
         searchDetails.push({
           criteria: 'city',
           location: currentUserCity,
@@ -1156,28 +1167,34 @@ const getRelatedCreators = async (req, res, next) => {
       }
     }
 
-    // Fallback: Nếu vẫn chưa đủ, lấy random creators có rating cao
-    const remainingLimit3 = totalLimit - allRelatedCreators.length;
-    if (remainingLimit3 > 0) {
-      const existingIds = allRelatedCreators.map(creator => creator.id);
+    // Fallback: Chỉ khi thực sự cần thiết (ít khi xảy ra)
+    if (allRelatedCreators.length < totalLimit) {
+      const remainingLimit = totalLimit - allRelatedCreators.length;
 
       const fallbackCreators = await Creator.findAll({
         where: {
-          ...baseWhereCondition,
           id: {
-            [Op.notIn]: [...existingIds, id]
+            [Op.notIn]: Array.from(usedCreatorIds)
           }
         },
-        include: includeConfig,
+        include: [{
+          model: User,
+          as: 'user',
+          where: {
+            role: 'creator',
+            isActive: true
+          },
+          attributes: ['id', 'username', 'firstName', 'lastName', 'avatar', 'city']
+        }],
         attributes: attributesConfig,
         order: orderConfig,
-        limit: remainingLimit3
+        limit: remainingLimit
       });
 
       if (fallbackCreators.length > 0) {
         allRelatedCreators.push(...fallbackCreators);
         searchDetails.push({
-          criteria: 'random_high_rating',
+          criteria: 'fallback_high_rating',
           location: 'nationwide',
           count: fallbackCreators.length
         });
@@ -1211,10 +1228,10 @@ const getRelatedCreators = async (req, res, next) => {
       searchDetails: searchDetails,
       total: transformedRows.length,
       requestedLimit: totalLimit,
-      priorityBreakdown: searchDetails.reduce((acc, detail) => {
-        acc[detail.criteria] = detail.count;
-        return acc;
-      }, {})
+      currentCreator: {
+        placeOfOperation: currentPlaceOfOperation,
+        userCity: currentUserCity
+      }
     });
   } catch (error) {
     next(error);
