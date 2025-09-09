@@ -990,7 +990,6 @@ const updateCreator = async (req, res, next) => {
     next(error);
   }
 };
-
 const getRelatedCreators = async (req, res, next) => {
  try {
    const { id } = req.params;
@@ -1015,129 +1014,136 @@ const getRelatedCreators = async (req, res, next) => {
    const currentPlaceOfOperation = currentCreator.placeOfOperation;
    const currentUserCity = currentCreator.user.city;
 
-   let relatedCreators;
-   let searchCriteria;
-   let searchLocation;
+   let relatedCreators = [];
+   let searchCriteria = 'none';
+   let searchLocation = null;
 
-   // Kiểm tra nếu placeOfOperation có dữ liệu (province hoặc district không null)
-   const hasPlaceOfOperation = currentPlaceOfOperation && 
-     (currentPlaceOfOperation.province || currentPlaceOfOperation.district);
-
-   if (hasPlaceOfOperation) {
-     // Tìm theo placeOfOperation
-     const whereConditions = {
-       id: {
-         [Op.ne]: id // Loại trừ creator hiện tại
-       }
-     };
-
-     // Tạo điều kiện tìm kiếm dựa trên province và district
-     const placeConditions = [];
-     
-     if (currentPlaceOfOperation.province) {
-       placeConditions.push({
-         'placeOfOperation.province': currentPlaceOfOperation.province
-       });
+   const baseWhereCondition = {
+     id: {
+       [Op.ne]: id // Loại trừ creator hiện tại
      }
-     
-     if (currentPlaceOfOperation.district) {
-       placeConditions.push({
-         'placeOfOperation.district': currentPlaceOfOperation.district
-       });
-     }
+   };
 
-     // Ưu tiên tìm creators có cùng cả province và district
+   const includeConfig = [{
+     model: User,
+     as: 'user',
+     where: {
+       role: 'creator',
+       isActive: true
+     },
+     attributes: ['id', 'username', 'firstName', 'lastName', 'avatar', 'city']
+   }];
+
+   const attributesConfig = [
+     'id',
+     'stageName',
+     'bio',
+     'tags',
+     'rating',
+     'totalRatings',
+     'isVerified',
+     'isLive',
+     'bookingPrice',
+     'subscriptionPrice',
+     'specialties',
+     'languages',
+     'isAvailableForBooking',
+     'createdAt',
+     'placeOfOperation'
+   ];
+
+   const orderConfig = [['rating', 'DESC']];
+   const limitConfig = 10;
+
+   // Ưu tiên 1: Tìm theo cả district và province (case insensitive)
+   if (currentPlaceOfOperation && currentPlaceOfOperation.district && currentPlaceOfOperation.province) {
      relatedCreators = await Creator.findAll({
        where: {
-         ...whereConditions,
-         [Op.and]: placeConditions.map(condition => 
-           require('sequelize').literal(
-             Object.keys(condition).map(key => 
-               `"Creator"."placeOfOperation"->>'${key.split('.')[1]}' = '${condition[key]}'`
-             ).join(' AND ')
-           )
-         )
+         ...baseWhereCondition,
+         [Op.and]: [
+           require('sequelize').literal(`LOWER("Creator"."placeOfOperation"->>'province') = LOWER('${currentPlaceOfOperation.province.replace(/'/g, "''")}')`),
+           require('sequelize').literal(`LOWER("Creator"."placeOfOperation"->>'district') = LOWER('${currentPlaceOfOperation.district.replace(/'/g, "''")}')`),
+         ]
        },
-       include: [{
-         model: User,
-         as: 'user',
-         where: {
-           role: 'creator',
-           isActive: true
-         },
-         attributes: ['id', 'username', 'firstName', 'lastName', 'avatar', 'city']
-       }],
-       attributes: [
-         'id',
-         'stageName',
-         'bio',
-         'tags',
-         'rating',
-         'totalRatings',
-         'isVerified',
-         'isLive',
-         'bookingPrice',
-         'subscriptionPrice',
-         'specialties',
-         'languages',
-         'isAvailableForBooking',
-         'createdAt',
-         'placeOfOperation'
-       ],
-       order: [['rating', 'DESC']],
-       limit: 10
+       include: includeConfig,
+       attributes: attributesConfig,
+       order: orderConfig,
+       limit: limitConfig
      });
 
-     searchCriteria = 'placeOfOperation';
-     searchLocation = currentPlaceOfOperation;
-   } 
-   // Nếu placeOfOperation null hoặc rỗng, tìm theo city của user
-   else if (currentUserCity) {
+     if (relatedCreators.length > 0) {
+       searchCriteria = 'district_and_province';
+       searchLocation = {
+         province: currentPlaceOfOperation.province,
+         district: currentPlaceOfOperation.district
+       };
+     }
+   }
+
+   // Ưu tiên 2: Nếu không tìm được hoặc chỉ có province, tìm theo province (case insensitive)
+   if (relatedCreators.length === 0 && currentPlaceOfOperation && currentPlaceOfOperation.province) {
      relatedCreators = await Creator.findAll({
        where: {
-         id: {
-           [Op.ne]: id // Loại trừ creator hiện tại
-         }
+         ...baseWhereCondition,
+         [Op.and]: [
+           require('sequelize').literal(`LOWER("Creator"."placeOfOperation"->>'province') = LOWER('${currentPlaceOfOperation.province.replace(/'/g, "''")}')`),
+         ]
        },
+       include: includeConfig,
+       attributes: attributesConfig,
+       order: orderConfig,
+       limit: limitConfig
+     });
+
+     if (relatedCreators.length > 0) {
+       searchCriteria = 'province';
+       searchLocation = {
+         province: currentPlaceOfOperation.province
+       };
+     }
+   }
+
+   // Ưu tiên 3: Nếu vẫn không tìm được, tìm theo city của user (case insensitive)
+   if (relatedCreators.length === 0 && currentUserCity) {
+     relatedCreators = await Creator.findAll({
+       where: baseWhereCondition,
        include: [{
          model: User,
          as: 'user',
          where: {
            role: 'creator',
            isActive: true,
-           city: currentUserCity
+           city: {
+             [Op.iLike]: currentUserCity // Case insensitive cho city
+           }
          },
          attributes: ['id', 'username', 'firstName', 'lastName', 'avatar', 'city']
        }],
-       attributes: [
-         'id',
-         'stageName',
-         'bio',
-         'tags',
-         'rating',
-         'totalRatings',
-         'isVerified',
-         'isLive',
-         'bookingPrice',
-         'subscriptionPrice',
-         'specialties',
-         'languages',
-         'isAvailableForBooking',
-         'createdAt',
-         'placeOfOperation'
-       ],
-       order: [['rating', 'DESC']],
-       limit: 10
+       attributes: attributesConfig,
+       order: orderConfig,
+       limit: limitConfig
      });
 
-     searchCriteria = 'city';
-     searchLocation = currentUserCity;
-   } 
-   // Nếu cả placeOfOperation và city đều null, trả về mảng rỗng
-   else {
-     relatedCreators = [];
-     searchCriteria = 'none';
-     searchLocation = null;
+     if (relatedCreators.length > 0) {
+       searchCriteria = 'city';
+       searchLocation = currentUserCity;
+     }
+   }
+
+   // Fallback: Nếu vẫn không có kết quả, lấy random creators có rating cao
+   if (relatedCreators.length === 0) {
+     relatedCreators = await Creator.findAll({
+       where: baseWhereCondition,
+       include: includeConfig,
+       attributes: attributesConfig,
+       order: orderConfig,
+       limit: limitConfig
+     });
+
+     if (relatedCreators.length > 0) {
+       searchCriteria = 'random_high_rating';
+       searchLocation = 'nationwide';
+     }
    }
 
    // Transform data để include userId ở top level
