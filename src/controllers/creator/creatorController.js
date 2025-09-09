@@ -561,188 +561,197 @@ const getFeaturedCreators = async (req, res, next) => {
  * @access  Public
  */
 const getCallgirlCreators = async (req, res, next) => {
-  try {
-    const { 
-      page = 1, 
-      limit = 10, 
-      city, 
-      minPrice, 
-      maxPrice, 
-      sortBy = 'rating',
-      isVerified,
-      isAvailable
-    } = req.query;
-    
-    const offset = (page - 1) * limit;
-    const { Op } = require('sequelize');
+ try {
+   const { 
+     page = 1, 
+     limit = 10, 
+     province,
+     district, 
+     minPrice, 
+     maxPrice, 
+     sortBy = 'rating',
+     isVerified,
+     isAvailable
+   } = req.query;
+   
+   const offset = (page - 1) * limit;
+   const { Op } = require('sequelize');
 
-    // Build where conditions cho User (city filter)
-    const userWhere = {
-      role: 'creator',
-      isActive: true
-    };
+   // Build where conditions cho User - bỏ city filter
+   const userWhere = {
+     role: 'creator',
+     isActive: true
+   };
 
-    if (city) {
-      userWhere.city = {
-        [Op.iLike]: `%${city}%`
-      };
-    }
+   // Build where conditions cho Creator - dùng raw query để tránh lỗi JSON
+   let creatorWhereClause = `"Creator"."specialties"::text LIKE '%"callgirl"%'`;
+   const replacements = {};
+   let paramIndex = 1;
 
-    // Build where conditions cho Creator - dùng raw query để tránh lỗi JSON
-    let creatorWhereClause = `"Creator"."specialties"::text LIKE '%"callgirl"%'`;
-    const replacements = {};
-    let paramIndex = 1;
+   // Filter theo province (case insensitive)
+   if (province) {
+     creatorWhereClause += ` AND LOWER("Creator"."placeOfOperation"->>'province') = LOWER(:province${paramIndex})`;
+     replacements[`province${paramIndex}`] = province;
+     paramIndex++;
+   }
 
-    // Filter theo booking price
-    if (minPrice) {
-      creatorWhereClause += ` AND "Creator"."bookingPrice" >= :minPrice${paramIndex}`;
-      replacements[`minPrice${paramIndex}`] = parseFloat(minPrice);
-      paramIndex++;
-    }
-    
-    if (maxPrice) {
-      creatorWhereClause += ` AND "Creator"."bookingPrice" <= :maxPrice${paramIndex}`;
-      replacements[`maxPrice${paramIndex}`] = parseFloat(maxPrice);
-      paramIndex++;
-    }
+   // Filter theo district (case insensitive) - chỉ khi có province
+   if (district && province) {
+     creatorWhereClause += ` AND LOWER("Creator"."placeOfOperation"->>'district') = LOWER(:district${paramIndex})`;
+     replacements[`district${paramIndex}`] = district;
+     paramIndex++;
+   }
 
-    // Filter theo verified status
-    if (isVerified !== undefined) {
-      creatorWhereClause += ` AND "Creator"."isVerified" = :isVerified${paramIndex}`;
-      replacements[`isVerified${paramIndex}`] = isVerified === 'true';
-      paramIndex++;
-    }
+   // Filter theo booking price
+   if (minPrice) {
+     creatorWhereClause += ` AND "Creator"."bookingPrice" >= :minPrice${paramIndex}`;
+     replacements[`minPrice${paramIndex}`] = parseFloat(minPrice);
+     paramIndex++;
+   }
+   
+   if (maxPrice) {
+     creatorWhereClause += ` AND "Creator"."bookingPrice" <= :maxPrice${paramIndex}`;
+     replacements[`maxPrice${paramIndex}`] = parseFloat(maxPrice);
+     paramIndex++;
+   }
 
-    // Filter theo availability
-    if (isAvailable !== undefined) {
-      creatorWhereClause += ` AND "Creator"."isAvailableForBooking" = :isAvailable${paramIndex}`;
-      replacements[`isAvailable${paramIndex}`] = isAvailable === 'true';
-      paramIndex++;
-    }
+   // Filter theo verified status
+   if (isVerified !== undefined) {
+     creatorWhereClause += ` AND "Creator"."isVerified" = :isVerified${paramIndex}`;
+     replacements[`isVerified${paramIndex}`] = isVerified === 'true';
+     paramIndex++;
+   }
 
-    // Define sort options
-    let orderBy;
-    switch (sortBy) {
-      case 'rating':
-        orderBy = [['rating', 'DESC']];
-        break;
-      case 'price_low':
-        orderBy = [['bookingPrice', 'ASC']];
-        break;
-      case 'price_high':
-        orderBy = [['bookingPrice', 'DESC']];
-        break;
-      case 'newest':
-        orderBy = [['createdAt', 'DESC']];
-        break;
-      case 'followers':
-        orderBy = [[require('sequelize').fn('COUNT', require('sequelize').col('followers.id')), 'DESC']];
-        break;
-      default:
-        orderBy = [['rating', 'DESC']];
-    }
+   // Filter theo availability
+   if (isAvailable !== undefined) {
+     creatorWhereClause += ` AND "Creator"."isAvailableForBooking" = :isAvailable${paramIndex}`;
+     replacements[`isAvailable${paramIndex}`] = isAvailable === 'true';
+     paramIndex++;
+   }
 
-    const { count, rows } = await Creator.findAndCountAll({
-      where: require('sequelize').literal(creatorWhereClause),
-      replacements: replacements,
-      include: [
-        {
-          model: User,
-          as: 'user',
-          where: userWhere,
-          attributes: ['id', 'username', 'firstName', 'lastName', 'avatar', 'city', 'isOnline']
-        },
-        {
-          model: Follow,
-          as: 'followers',
-          attributes: []
-        }
-      ],
-      attributes: [
-        'id',
-        'stageName',
-        'bio',
-        'tags',
-        'rating',
-        'totalRatings',
-        'isVerified',
-        'isLive',
-        'bookingPrice',
-        'subscriptionPrice',
-        'specialties',
-        'languages',
-        'bodyType',
-        'height',
-        'weight',
-        'eyeColor',
-        'hairColor',
-        'isAvailableForBooking',
-        'service',
-        'createdAt',
-        'placeOfOperation',
-        'telegram',
-        [require('sequelize').fn('COUNT', require('sequelize').col('followers.id')), 'followersCount']
-      ],
-      limit: parseInt(limit),
-      offset: parseInt(offset),
-      order: orderBy,
-      group: ['Creator.id', 'user.id'],
-      distinct: true,
-      subQuery: false
-    });
+   // Define sort options
+   let orderBy;
+   switch (sortBy) {
+     case 'rating':
+       orderBy = [['rating', 'DESC']];
+       break;
+     case 'price_low':
+       orderBy = [['bookingPrice', 'ASC']];
+       break;
+     case 'price_high':
+       orderBy = [['bookingPrice', 'DESC']];
+       break;
+     case 'newest':
+       orderBy = [['createdAt', 'DESC']];
+       break;
+     case 'followers':
+       orderBy = [[require('sequelize').fn('COUNT', require('sequelize').col('followers.id')), 'DESC']];
+       break;
+     default:
+       orderBy = [['rating', 'DESC']];
+   }
 
-    // Transform data
-    const transformedRows = rows.map(creator => ({
-      id: creator.id,
-      userId: creator.user.id,
-      stageName: creator.stageName,
-      bio: creator.bio,
-      tags: creator.tags,
-      rating: creator.rating,
-      totalRatings: creator.totalRatings,
-      isVerified: creator.isVerified,
-      isLive: creator.isLive,
-      bookingPrice: creator.bookingPrice,
-      subscriptionPrice: creator.subscriptionPrice,
-      specialties: creator.specialties,
-      languages: creator.languages,
-      bodyType: creator.bodyType,
-      height: creator.height,
-      weight: creator.weight,
-      eyeColor: creator.eyeColor,
-      hairColor: creator.hairColor,
-      isAvailableForBooking: creator.isAvailableForBooking,
-      service: creator.service,
-      createdAt: creator.createdAt,
-      followersCount: parseInt(creator.dataValues.followersCount) || 0,
-      user: creator.user,
-      placeOfOperation: creator.placeOfOperation,
-      telegram: creator.telegram
-    }));
+   const { count, rows } = await Creator.findAndCountAll({
+     where: require('sequelize').literal(creatorWhereClause),
+     replacements: replacements,
+     include: [
+       {
+         model: User,
+         as: 'user',
+         where: userWhere,
+         attributes: ['id', 'username', 'firstName', 'lastName', 'avatar', 'city', 'isOnline']
+       },
+       {
+         model: Follow,
+         as: 'followers',
+         attributes: []
+       }
+     ],
+     attributes: [
+       'id',
+       'stageName',
+       'bio',
+       'tags',
+       'rating',
+       'totalRatings',
+       'isVerified',
+       'isLive',
+       'bookingPrice',
+       'subscriptionPrice',
+       'specialties',
+       'languages',
+       'bodyType',
+       'height',
+       'weight',
+       'eyeColor',
+       'hairColor',
+       'isAvailableForBooking',
+       'service',
+       'createdAt',
+       'placeOfOperation',
+       'telegram',
+       [require('sequelize').fn('COUNT', require('sequelize').col('followers.id')), 'followersCount']
+     ],
+     limit: parseInt(limit),
+     offset: parseInt(offset),
+     order: orderBy,
+     group: ['Creator.id', 'user.id'],
+     distinct: true,
+     subQuery: false
+   });
 
-    res.status(StatusCodes.OK).json({
-      success: true,
-      data: transformedRows,
-      pagination: {
-        total: count.length || count,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        totalPages: Math.ceil((count.length || count) / limit),
-      },
-      filters: {
-        city,
-        minPrice,
-        maxPrice,
-        sortBy,
-        isVerified,
-        isAvailable
-      }
-    });
-  } catch (error) {
-    next(error);
-  }
+   // Transform data
+   const transformedRows = rows.map(creator => ({
+     id: creator.id,
+     userId: creator.user.id,
+     stageName: creator.stageName,
+     bio: creator.bio,
+     tags: creator.tags,
+     rating: creator.rating,
+     totalRatings: creator.totalRatings,
+     isVerified: creator.isVerified,
+     isLive: creator.isLive,
+     bookingPrice: creator.bookingPrice,
+     subscriptionPrice: creator.subscriptionPrice,
+     specialties: creator.specialties,
+     languages: creator.languages,
+     bodyType: creator.bodyType,
+     height: creator.height,
+     weight: creator.weight,
+     eyeColor: creator.eyeColor,
+     hairColor: creator.hairColor,
+     isAvailableForBooking: creator.isAvailableForBooking,
+     service: creator.service,
+     createdAt: creator.createdAt,
+     followersCount: parseInt(creator.dataValues.followersCount) || 0,
+     user: creator.user,
+     placeOfOperation: creator.placeOfOperation,
+     telegram: creator.telegram
+   }));
+
+   res.status(StatusCodes.OK).json({
+     success: true,
+     data: transformedRows,
+     pagination: {
+       total: count.length || count,
+       page: parseInt(page),
+       limit: parseInt(limit),
+       totalPages: Math.ceil((count.length || count) / limit),
+     },
+     filters: {
+       province,
+       district,
+       minPrice,
+       maxPrice,
+       sortBy,
+       isVerified,
+       isAvailable
+     }
+   });
+ } catch (error) {
+   next(error);
+ }
 };
-
 /**
  * @desc    Update creator information
  * @route   PUT /api/v1/creators/:id
