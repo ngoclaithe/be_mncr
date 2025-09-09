@@ -1167,39 +1167,7 @@ const getRelatedCreators = async (req, res, next) => {
       }
     }
 
-    // Fallback: Chỉ khi thực sự cần thiết (ít khi xảy ra)
-    if (allRelatedCreators.length < totalLimit) {
-      const remainingLimit = totalLimit - allRelatedCreators.length;
-
-      const fallbackCreators = await Creator.findAll({
-        where: {
-          id: {
-            [Op.notIn]: Array.from(usedCreatorIds)
-          }
-        },
-        include: [{
-          model: User,
-          as: 'user',
-          where: {
-            role: 'creator',
-            isActive: true
-          },
-          attributes: ['id', 'username', 'firstName', 'lastName', 'avatar', 'city']
-        }],
-        attributes: attributesConfig,
-        order: orderConfig,
-        limit: remainingLimit
-      });
-
-      if (fallbackCreators.length > 0) {
-        allRelatedCreators.push(...fallbackCreators);
-        searchDetails.push({
-          criteria: 'fallback_high_rating',
-          location: 'nationwide',
-          count: fallbackCreators.length
-        });
-      }
-    }
+    // KHÔNG CÓ FALLBACK - chỉ trả về những gì match thực sự
 
     // Transform data để include userId ở top level
     const transformedRows = allRelatedCreators.map(creator => ({
@@ -1237,6 +1205,7 @@ const getRelatedCreators = async (req, res, next) => {
     next(error);
   }
 };
+
 module.exports = {
   getCreators,
   getCreatorById,
