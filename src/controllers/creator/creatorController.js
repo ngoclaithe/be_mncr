@@ -980,7 +980,7 @@ const updateCreator = async (req, res, next) => {
   }
 };
 
-const getRelatedCreator = async (req, res, next) => {
+const getRelatedCreators = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { Op } = require('sequelize');
@@ -1131,5 +1131,5 @@ module.exports = {
   getFeaturedCreators,
   getCallgirlCreators,
   updateCreator,
-  getRelatedCreator
+  getRelatedCreators
 };

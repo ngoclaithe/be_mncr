@@ -31,7 +31,7 @@ router.get('/verified', creatorController.getVerifiedCreators);
 // @access  Public
 router.get('/featured', creatorController.getFeaturedCreators);
 router.get('/live', creatorController.getLiveCreators);
-
+router.get('/related/:id', creatorController.getRelatedCreators);
 // @route   GET /api/v2/creators/:id
 // @desc    Get a single creator by ID
 // @access  Public
