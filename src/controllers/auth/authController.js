@@ -1092,7 +1092,11 @@ class AuthController {
         cosmeticSurgery,
         bookingPrice,
         subscriptionPrice,
-        availabilitySchedule = {}
+        availabilitySchedule = {},
+        instagram,
+        facebook,
+        telegram,
+        placeOfOperation
       } = req.body;
 
       let username;
@@ -1198,7 +1202,11 @@ class AuthController {
         cosmeticSurgery,
         bookingPrice,
         subscriptionPrice,
-        availabilitySchedule
+        availabilitySchedule,
+        instagram,
+        facebook,
+        telegram,
+        placeOfOperation
       });
 
       const wallet = await Wallet.create({ userId: user.id });

@@ -36,6 +36,22 @@ const Creator = sequelize.define('Creator', {
     type: DataTypes.JSON,
     defaultValue: []
   },
+  placeOfOperation: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  telegram: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  instagram: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  facebook: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
   rating: {
     type: DataTypes.DECIMAL(3, 2),
     defaultValue: 0.0,

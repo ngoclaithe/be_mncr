@@ -79,6 +79,7 @@ const getCreators = async (req, res, next) => {
         'languages',
         'isAvailableForBooking',
         'createdAt',
+        'placeOfOperation',
         [require('sequelize').fn('COUNT', require('sequelize').col('followers.id')), 'followersCount']
       ],
       limit: parseInt(limit),
@@ -108,7 +109,8 @@ const getCreators = async (req, res, next) => {
       isAvailableForBooking: creator.isAvailableForBooking,
       createdAt: creator.createdAt,
       followersCount: parseInt(creator.dataValues.followersCount) || 0,
-      user: creator.user
+      user: creator.user,
+      placeOfOperation: creator.placeOfOperation
     }));
 
     res.status(StatusCodes.OK).json({
@@ -191,6 +193,10 @@ const getCreatorById = async (req, res, next) => {
         'isAvailableForBooking',
         'createdAt',
         'updatedAt',
+        'placeOfOperation',
+        'telegram',
+        'instagram',
+        'facebook',
         [require('sequelize').fn('COUNT', require('sequelize').col('followers.id')), 'followersCount']
       ],
       group: ['Creator.id', 'user.id']
@@ -263,7 +269,8 @@ const getVerifiedCreators = async (req, res, next) => {
         'isVerified',
         'specialties',
         'bookingPrice',
-        'subscriptionPrice'
+        'subscriptionPrice',
+        'placeOfOperation'
       ],
       limit: parseInt(limit),
       offset: parseInt(offset),
@@ -284,7 +291,8 @@ const getVerifiedCreators = async (req, res, next) => {
       specialties: creator.specialties,
       bookingPrice: creator.bookingPrice,
       subscriptionPrice: creator.subscriptionPrice,
-      user: creator.user
+      user: creator.user,
+      placeOfOperation: creator.placeOfOperation
     }));
 
     res.status(StatusCodes.OK).json({
@@ -349,7 +357,8 @@ const getLiveCreators = async (req, res, next) => {
       isVerified: creator.isVerified,
       tags: creator.tags,
       specialties: creator.specialties,
-      user: creator.user
+      user: creator.user,
+      placeOfOperation: creator.placeOfOperation
     }));
 
     res.status(StatusCodes.OK).json({
@@ -437,7 +446,8 @@ const searchCreators = async (req, res, next) => {
         'isVerified',
         'specialties',
         'bookingPrice',
-        'subscriptionPrice'
+        'subscriptionPrice',
+        'placeOfOperation'
       ],
       limit: parseInt(limit),
       offset: parseInt(offset),
@@ -457,7 +467,8 @@ const searchCreators = async (req, res, next) => {
       specialties: creator.specialties,
       bookingPrice: creator.bookingPrice,
       subscriptionPrice: creator.subscriptionPrice,
-      user: creator.user
+      user: creator.user,
+      placeOfOperation: creator.placeOfOperation
     }));
 
     res.status(StatusCodes.OK).json({
@@ -668,6 +679,8 @@ const getCallgirlCreators = async (req, res, next) => {
         'isAvailableForBooking',
         'service',
         'createdAt',
+        'placeOfOperation',
+        'telegram',
         [require('sequelize').fn('COUNT', require('sequelize').col('followers.id')), 'followersCount']
       ],
       limit: parseInt(limit),
@@ -702,7 +715,9 @@ const getCallgirlCreators = async (req, res, next) => {
       service: creator.service,
       createdAt: creator.createdAt,
       followersCount: parseInt(creator.dataValues.followersCount) || 0,
-      user: creator.user
+      user: creator.user,
+      placeOfOperation: creator.placeOfOperation,
+      telegram: creator.telegram
     }));
 
     res.status(StatusCodes.OK).json({
@@ -733,17 +748,10 @@ const getCallgirlCreators = async (req, res, next) => {
  * @access  Private (Creator/Admin)
  */
 const updateCreator = async (req, res, next) => {
-  console.log('=== 1. FUNCTION START ===');
   
   const errors = validationResult(req);
-  console.log('=== 2. DEBUG UPDATE CREATOR ===');
-  console.log('Request Body:', JSON.stringify(req.body, null, 2));
-  console.log('Request Params:', req.params);
-  console.log('Current User:', req.user);
-  console.log('Has validation errors:', !errors.isEmpty());
   
   if (!errors.isEmpty()) {
-    console.log('=== 3. VALIDATION ERRORS FOUND ===');
     console.log('Validation errors:', JSON.stringify(errors.array(), null, 2));
     return res.status(StatusCodes.BAD_REQUEST).json({
       success: false,
@@ -751,19 +759,15 @@ const updateCreator = async (req, res, next) => {
     });
   }
 
-  console.log('=== 4. PASSED VALIDATION - ENTERING TRY BLOCK ===');
-
   try {
     const { id } = req.params;
     const currentUser = req.user;
     const isAdmin = currentUser?.role === 'admin';
 
-    console.log('=== 5. VARIABLES EXTRACTED ===');
     console.log('Creator ID:', id);
     console.log('Is Admin:', isAdmin);
 
     // Tìm creator cần update
-    console.log('=== 6. FINDING CREATOR ===');
     const creator = await Creator.findByPk(id, {
       include: [{
         model: User,
@@ -771,37 +775,24 @@ const updateCreator = async (req, res, next) => {
       }]
     });
 
-    console.log('=== 7. CREATOR FOUND RESULT ===');
-    console.log('Creator exists:', !!creator);
+
     if (creator) {
       console.log('Creator ID:', creator.id);
-      console.log('Creator userId:', creator.userId);
-      console.log('Creator stageName:', creator.stageName);
     }
 
     if (!creator) {
-      console.log('=== 8. CREATOR NOT FOUND - RETURNING 404 ===');
       return res.status(StatusCodes.NOT_FOUND).json({
         success: false,
         message: 'Creator not found'
       });
     }
 
-    // Kiểm tra quyền: chỉ admin hoặc chính creator đó mới được update
-    console.log('=== 9. CHECKING AUTHORIZATION ===');
-    console.log('Current user ID:', currentUser.id);
-    console.log('Creator user ID:', creator.userId);
-    console.log('Authorization check:', isAdmin || currentUser.id === creator.userId);
-
     if (!isAdmin && currentUser.id !== creator.userId) {
-      console.log('=== 10. AUTHORIZATION FAILED - RETURNING 403 ===');
       return res.status(StatusCodes.FORBIDDEN).json({
         success: false,
         message: 'Not authorized to update this creator'
       });
     }
-
-    console.log('=== 11. AUTHORIZATION PASSED - EXTRACTING DATA ===');
 
     // Tách data cho User và Creator
     const {
@@ -844,6 +835,10 @@ const updateCreator = async (req, res, next) => {
       hairColor,
       cosmeticSurgery,
       isAvailableForBooking,
+      placeOfOperation,
+      telegram,
+      instagram,
+      facebook,
       
       // Admin only fields
       isVerified,
@@ -852,8 +847,6 @@ const updateCreator = async (req, res, next) => {
       rating,
       totalRatings
     } = req.body;
-
-    console.log('=== 12. DATA EXTRACTED - PREPARING USER UPDATE ===');
 
     // Prepare update data for User
     const userUpdateData = {};
@@ -868,7 +861,6 @@ const updateCreator = async (req, res, next) => {
     if (timezone !== undefined) userUpdateData.timezone = timezone;
     if (language !== undefined) userUpdateData.language = language;
 
-    console.log('=== 13. USER UPDATE DATA PREPARED ===');
     console.log('User update data:', JSON.stringify(userUpdateData, null, 2));
 
     // Prepare update data for Creator
@@ -898,6 +890,10 @@ const updateCreator = async (req, res, next) => {
     if (hairColor !== undefined) creatorUpdateData.hairColor = hairColor;
     if (cosmeticSurgery !== undefined) creatorUpdateData.cosmeticSurgery = cosmeticSurgery;
     if (isAvailableForBooking !== undefined) creatorUpdateData.isAvailableForBooking = isAvailableForBooking;
+    if (placeOfOperation !== undefined) creatorUpdateData.placeOfOperation = placeOfOperation;
+    if (telegram !== undefined) creatorUpdateData.telegram = telegram;
+    if (instagram !== undefined) creatorUpdateData.instagram = instagram;
+    if (facebook !== undefined) creatorUpdateData.facebook = facebook;
 
     // Admin only fields
     if (isAdmin) {
@@ -908,49 +904,29 @@ const updateCreator = async (req, res, next) => {
       if (totalRatings !== undefined) creatorUpdateData.totalRatings = totalRatings;
     }
 
-    console.log('=== 14. CREATOR UPDATE DATA PREPARED ===');
-    console.log('Creator update data:', JSON.stringify(creatorUpdateData, null, 2));
-    console.log('User update fields count:', Object.keys(userUpdateData).length);
-    console.log('Creator update fields count:', Object.keys(creatorUpdateData).length);
-
-    console.log('=== 15. STARTING TRANSACTION ===');
-
     // Sử dụng transaction để đảm bảo data consistency
     const result = await sequelize.transaction(async (t) => {
-      console.log('=== 16. INSIDE TRANSACTION ===');
       
       // Update User nếu có data
       if (Object.keys(userUpdateData).length > 0) {
-        console.log('=== 17. UPDATING USER ===');
-        console.log('Updating user ID:', creator.userId);
-        console.log('User data to update:', userUpdateData);
         
         await User.update(userUpdateData, {
           where: { id: creator.userId },
           transaction: t
         });
-        console.log('=== 18. USER UPDATE COMPLETED ===');
       } else {
         console.log('=== 17. SKIPPING USER UPDATE (no data) ===');
       }
 
       // Update Creator nếu có data
-      if (Object.keys(creatorUpdateData).length > 0) {
-        console.log('=== 19. UPDATING CREATOR ===');
-        console.log('Updating creator ID:', creator.id);
-        console.log('Creator data to update:', creatorUpdateData);
-        
+      if (Object.keys(creatorUpdateData).length > 0) {       
         await Creator.update(creatorUpdateData, {
           where: { id: creator.id },
           transaction: t
         });
-        console.log('=== 20. CREATOR UPDATE COMPLETED ===');
       } else {
         console.log('=== 19. SKIPPING CREATOR UPDATE (no data) ===');
-      }
-
-      console.log('=== 21. FETCHING UPDATED CREATOR ===');
-      
+      }      
       // Lấy updated data
       const updatedCreator = await Creator.findByPk(id, {
         include: [{
@@ -963,13 +939,8 @@ const updateCreator = async (req, res, next) => {
         transaction: t
       });
 
-      console.log('=== 22. UPDATED CREATOR FETCHED ===');
-      console.log('Updated creator exists:', !!updatedCreator);
-
       return updatedCreator;
     });
-
-    console.log('=== 23. TRANSACTION COMPLETED ===');
 
     // Transform response data
     const transformedCreator = {
@@ -977,26 +948,16 @@ const updateCreator = async (req, res, next) => {
       userId: result.user.id
     };
 
-    console.log('=== 24. DATA TRANSFORMED - SENDING RESPONSE ===');
-
     res.status(StatusCodes.OK).json({
       success: true,
       message: 'Creator updated successfully',
       data: transformedCreator
     });
 
-    console.log('=== 25. RESPONSE SENT SUCCESSFULLY ===');
-
   } catch (error) {
-    console.log('=== 26. ERROR CAUGHT ===');
-    console.log('Error name:', error.name);
-    console.log('Error message:', error.message);
-    console.log('Error stack:', error.stack);
     
     // Xử lý specific errors
     if (error.name === 'SequelizeUniqueConstraintError') {
-      console.log('=== 27. UNIQUE CONSTRAINT ERROR ===');
-      console.log('Constraint details:', error.errors);
       return res.status(StatusCodes.BAD_REQUEST).json({
         success: false,
         message: 'Username or email already exists'
@@ -1004,7 +965,6 @@ const updateCreator = async (req, res, next) => {
     }
     
     if (error.name === 'SequelizeValidationError') {
-      console.log('=== 28. SEQUELIZE VALIDATION ERROR ===');
       console.log('Validation errors:', error.errors);
       return res.status(StatusCodes.BAD_REQUEST).json({
         success: false,
@@ -1016,7 +976,148 @@ const updateCreator = async (req, res, next) => {
       });
     }
 
-    console.log('=== 29. FORWARDING ERROR TO NEXT() ===');
+    next(error);
+  }
+};
+
+const getRelatedCreator = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { Op } = require('sequelize');
+
+    // Tìm creator hiện tại với thông tin user để lấy city
+    const currentCreator = await Creator.findByPk(id, {
+      include: [{
+        model: User,
+        as: 'user',
+        attributes: ['city']
+      }]
+    });
+
+    if (!currentCreator) {
+      return res.status(StatusCodes.NOT_FOUND).json({
+        success: false,
+        message: 'Creator not found'
+      });
+    }
+
+    const currentPlaceOfOperation = currentCreator.placeOfOperation;
+    const currentUserCity = currentCreator.user.city;
+
+    let relatedCreators;
+
+    // Nếu placeOfOperation không null, tìm theo placeOfOperation
+    if (currentPlaceOfOperation) {
+      relatedCreators = await Creator.findAll({
+        where: {
+          placeOfOperation: currentPlaceOfOperation,
+          id: {
+            [Op.ne]: id // Loại trừ creator hiện tại
+          }
+        },
+        include: [{
+          model: User,
+          as: 'user',
+          where: {
+            role: 'creator',
+            isActive: true
+          },
+          attributes: ['id', 'username', 'firstName', 'lastName', 'avatar', 'city']
+        }],
+        attributes: [
+          'id',
+          'stageName',
+          'bio',
+          'tags',
+          'rating',
+          'totalRatings',
+          'isVerified',
+          'isLive',
+          'bookingPrice',
+          'subscriptionPrice',
+          'specialties',
+          'languages',
+          'isAvailableForBooking',
+          'createdAt',
+          'placeOfOperation'
+        ],
+        order: [['rating', 'DESC']], // Sắp xếp theo rating giảm dần
+        limit: 10 // Giới hạn số lượng kết quả
+      });
+    } 
+    // Nếu placeOfOperation null, tìm theo city của user
+    else if (currentUserCity) {
+      relatedCreators = await Creator.findAll({
+        where: {
+          id: {
+            [Op.ne]: id // Loại trừ creator hiện tại
+          }
+        },
+        include: [{
+          model: User,
+          as: 'user',
+          where: {
+            role: 'creator',
+            isActive: true,
+            city: currentUserCity
+          },
+          attributes: ['id', 'username', 'firstName', 'lastName', 'avatar', 'city']
+        }],
+        attributes: [
+          'id',
+          'stageName',
+          'bio',
+          'tags',
+          'rating',
+          'totalRatings',
+          'isVerified',
+          'isLive',
+          'bookingPrice',
+          'subscriptionPrice',
+          'specialties',
+          'languages',
+          'isAvailableForBooking',
+          'createdAt',
+          'placeOfOperation'
+        ],
+        order: [['rating', 'DESC']], // Sắp xếp theo rating giảm dần
+        limit: 10 // Giới hạn số lượng kết quả
+      });
+    } 
+    // Nếu cả placeOfOperation và city đều null, trả về mảng rỗng
+    else {
+      relatedCreators = [];
+    }
+
+    // Transform data để include userId ở top level
+    const transformedRows = relatedCreators.map(creator => ({
+      id: creator.id,
+      userId: creator.user.id,
+      stageName: creator.stageName,
+      bio: creator.bio,
+      tags: creator.tags,
+      rating: creator.rating,
+      totalRatings: creator.totalRatings,
+      isVerified: creator.isVerified,
+      isLive: creator.isLive,
+      bookingPrice: creator.bookingPrice,
+      subscriptionPrice: creator.subscriptionPrice,
+      specialties: creator.specialties,
+      languages: creator.languages,
+      isAvailableForBooking: creator.isAvailableForBooking,
+      createdAt: creator.createdAt,
+      placeOfOperation: creator.placeOfOperation,
+      user: creator.user
+    }));
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: transformedRows,
+      criteria: currentPlaceOfOperation ? 'placeOfOperation' : 'city',
+      location: currentPlaceOfOperation || currentUserCity,
+      total: transformedRows.length
+    });
+  } catch (error) {
     next(error);
   }
 };
@@ -1029,5 +1130,6 @@ module.exports = {
   searchCreators,
   getFeaturedCreators,
   getCallgirlCreators,
-  updateCreator
+  updateCreator,
+  getRelatedCreator
 };
