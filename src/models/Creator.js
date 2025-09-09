@@ -37,8 +37,12 @@ const Creator = sequelize.define('Creator', {
     defaultValue: []
   },
   placeOfOperation: {
-    type: DataTypes.STRING,
-    allowNull: true
+    type: DataTypes.JSON,
+    allowNull: true,
+    defaultValue: {
+      province: null,
+      district: null
+    }
   },
   telegram: {
     type: DataTypes.STRING,

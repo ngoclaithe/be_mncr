@@ -742,6 +742,7 @@ const getCallgirlCreators = async (req, res, next) => {
     next(error);
   }
 };
+
 /**
  * @desc    Update creator information
  * @route   PUT /api/v1/creators/:id
@@ -890,7 +891,17 @@ const updateCreator = async (req, res, next) => {
     if (hairColor !== undefined) creatorUpdateData.hairColor = hairColor;
     if (cosmeticSurgery !== undefined) creatorUpdateData.cosmeticSurgery = cosmeticSurgery;
     if (isAvailableForBooking !== undefined) creatorUpdateData.isAvailableForBooking = isAvailableForBooking;
-    if (placeOfOperation !== undefined) creatorUpdateData.placeOfOperation = placeOfOperation;
+    // if (placeOfOperation !== undefined) creatorUpdateData.placeOfOperation = placeOfOperation;
+    if (placeOfOperation !== undefined) {
+      if (typeof placeOfOperation === 'object' && placeOfOperation !== null) {
+        creatorUpdateData.placeOfOperation = {
+          ...creator.placeOfOperation, 
+          ...placeOfOperation         
+        };
+      } else {
+        creatorUpdateData.placeOfOperation = placeOfOperation;
+      }
+    }
     if (telegram !== undefined) creatorUpdateData.telegram = telegram;
     if (instagram !== undefined) creatorUpdateData.instagram = instagram;
     if (facebook !== undefined) creatorUpdateData.facebook = facebook;
