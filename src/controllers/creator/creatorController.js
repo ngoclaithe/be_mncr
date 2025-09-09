@@ -992,145 +992,185 @@ const updateCreator = async (req, res, next) => {
 };
 
 const getRelatedCreators = async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const { Op } = require('sequelize');
+ try {
+   const { id } = req.params;
+   const { Op } = require('sequelize');
 
-    // Tìm creator hiện tại với thông tin user để lấy city
-    const currentCreator = await Creator.findByPk(id, {
-      include: [{
-        model: User,
-        as: 'user',
-        attributes: ['city']
-      }]
-    });
+   // Tìm creator hiện tại với thông tin user để lấy city
+   const currentCreator = await Creator.findByPk(id, {
+     include: [{
+       model: User,
+       as: 'user',
+       attributes: ['city']
+     }]
+   });
 
-    if (!currentCreator) {
-      return res.status(StatusCodes.NOT_FOUND).json({
-        success: false,
-        message: 'Creator not found'
-      });
-    }
+   if (!currentCreator) {
+     return res.status(StatusCodes.NOT_FOUND).json({
+       success: false,
+       message: 'Creator not found'
+     });
+   }
 
-    const currentPlaceOfOperation = currentCreator.placeOfOperation;
-    const currentUserCity = currentCreator.user.city;
+   const currentPlaceOfOperation = currentCreator.placeOfOperation;
+   const currentUserCity = currentCreator.user.city;
 
-    let relatedCreators;
+   let relatedCreators;
+   let searchCriteria;
+   let searchLocation;
 
-    // Nếu placeOfOperation không null, tìm theo placeOfOperation
-    if (currentPlaceOfOperation) {
-      relatedCreators = await Creator.findAll({
-        where: {
-          placeOfOperation: currentPlaceOfOperation,
-          id: {
-            [Op.ne]: id // Loại trừ creator hiện tại
-          }
-        },
-        include: [{
-          model: User,
-          as: 'user',
-          where: {
-            role: 'creator',
-            isActive: true
-          },
-          attributes: ['id', 'username', 'firstName', 'lastName', 'avatar', 'city']
-        }],
-        attributes: [
-          'id',
-          'stageName',
-          'bio',
-          'tags',
-          'rating',
-          'totalRatings',
-          'isVerified',
-          'isLive',
-          'bookingPrice',
-          'subscriptionPrice',
-          'specialties',
-          'languages',
-          'isAvailableForBooking',
-          'createdAt',
-          'placeOfOperation'
-        ],
-        order: [['rating', 'DESC']], // Sắp xếp theo rating giảm dần
-        limit: 10 // Giới hạn số lượng kết quả
-      });
-    } 
-    // Nếu placeOfOperation null, tìm theo city của user
-    else if (currentUserCity) {
-      relatedCreators = await Creator.findAll({
-        where: {
-          id: {
-            [Op.ne]: id // Loại trừ creator hiện tại
-          }
-        },
-        include: [{
-          model: User,
-          as: 'user',
-          where: {
-            role: 'creator',
-            isActive: true,
-            city: currentUserCity
-          },
-          attributes: ['id', 'username', 'firstName', 'lastName', 'avatar', 'city']
-        }],
-        attributes: [
-          'id',
-          'stageName',
-          'bio',
-          'tags',
-          'rating',
-          'totalRatings',
-          'isVerified',
-          'isLive',
-          'bookingPrice',
-          'subscriptionPrice',
-          'specialties',
-          'languages',
-          'isAvailableForBooking',
-          'createdAt',
-          'placeOfOperation'
-        ],
-        order: [['rating', 'DESC']], // Sắp xếp theo rating giảm dần
-        limit: 10 // Giới hạn số lượng kết quả
-      });
-    } 
-    // Nếu cả placeOfOperation và city đều null, trả về mảng rỗng
-    else {
-      relatedCreators = [];
-    }
+   // Kiểm tra nếu placeOfOperation có dữ liệu (province hoặc district không null)
+   const hasPlaceOfOperation = currentPlaceOfOperation && 
+     (currentPlaceOfOperation.province || currentPlaceOfOperation.district);
 
-    // Transform data để include userId ở top level
-    const transformedRows = relatedCreators.map(creator => ({
-      id: creator.id,
-      userId: creator.user.id,
-      stageName: creator.stageName,
-      bio: creator.bio,
-      tags: creator.tags,
-      rating: creator.rating,
-      totalRatings: creator.totalRatings,
-      isVerified: creator.isVerified,
-      isLive: creator.isLive,
-      bookingPrice: creator.bookingPrice,
-      subscriptionPrice: creator.subscriptionPrice,
-      specialties: creator.specialties,
-      languages: creator.languages,
-      isAvailableForBooking: creator.isAvailableForBooking,
-      createdAt: creator.createdAt,
-      placeOfOperation: creator.placeOfOperation,
-      user: creator.user
-    }));
+   if (hasPlaceOfOperation) {
+     // Tìm theo placeOfOperation
+     const whereConditions = {
+       id: {
+         [Op.ne]: id // Loại trừ creator hiện tại
+       }
+     };
 
-    res.status(StatusCodes.OK).json({
-      success: true,
-      data: transformedRows,
-      criteria: currentPlaceOfOperation ? 'placeOfOperation' : 'city',
-      location: currentPlaceOfOperation || currentUserCity,
-      total: transformedRows.length
-    });
-  } catch (error) {
-    next(error);
-  }
+     // Tạo điều kiện tìm kiếm dựa trên province và district
+     const placeConditions = [];
+     
+     if (currentPlaceOfOperation.province) {
+       placeConditions.push({
+         'placeOfOperation.province': currentPlaceOfOperation.province
+       });
+     }
+     
+     if (currentPlaceOfOperation.district) {
+       placeConditions.push({
+         'placeOfOperation.district': currentPlaceOfOperation.district
+       });
+     }
+
+     // Ưu tiên tìm creators có cùng cả province và district
+     relatedCreators = await Creator.findAll({
+       where: {
+         ...whereConditions,
+         [Op.and]: placeConditions.map(condition => 
+           require('sequelize').literal(
+             Object.keys(condition).map(key => 
+               `"Creator"."placeOfOperation"->>'${key.split('.')[1]}' = '${condition[key]}'`
+             ).join(' AND ')
+           )
+         )
+       },
+       include: [{
+         model: User,
+         as: 'user',
+         where: {
+           role: 'creator',
+           isActive: true
+         },
+         attributes: ['id', 'username', 'firstName', 'lastName', 'avatar', 'city']
+       }],
+       attributes: [
+         'id',
+         'stageName',
+         'bio',
+         'tags',
+         'rating',
+         'totalRatings',
+         'isVerified',
+         'isLive',
+         'bookingPrice',
+         'subscriptionPrice',
+         'specialties',
+         'languages',
+         'isAvailableForBooking',
+         'createdAt',
+         'placeOfOperation'
+       ],
+       order: [['rating', 'DESC']],
+       limit: 10
+     });
+
+     searchCriteria = 'placeOfOperation';
+     searchLocation = currentPlaceOfOperation;
+   } 
+   // Nếu placeOfOperation null hoặc rỗng, tìm theo city của user
+   else if (currentUserCity) {
+     relatedCreators = await Creator.findAll({
+       where: {
+         id: {
+           [Op.ne]: id // Loại trừ creator hiện tại
+         }
+       },
+       include: [{
+         model: User,
+         as: 'user',
+         where: {
+           role: 'creator',
+           isActive: true,
+           city: currentUserCity
+         },
+         attributes: ['id', 'username', 'firstName', 'lastName', 'avatar', 'city']
+       }],
+       attributes: [
+         'id',
+         'stageName',
+         'bio',
+         'tags',
+         'rating',
+         'totalRatings',
+         'isVerified',
+         'isLive',
+         'bookingPrice',
+         'subscriptionPrice',
+         'specialties',
+         'languages',
+         'isAvailableForBooking',
+         'createdAt',
+         'placeOfOperation'
+       ],
+       order: [['rating', 'DESC']],
+       limit: 10
+     });
+
+     searchCriteria = 'city';
+     searchLocation = currentUserCity;
+   } 
+   // Nếu cả placeOfOperation và city đều null, trả về mảng rỗng
+   else {
+     relatedCreators = [];
+     searchCriteria = 'none';
+     searchLocation = null;
+   }
+
+   // Transform data để include userId ở top level
+   const transformedRows = relatedCreators.map(creator => ({
+     id: creator.id,
+     userId: creator.user.id,
+     stageName: creator.stageName,
+     bio: creator.bio,
+     tags: creator.tags,
+     rating: creator.rating,
+     totalRatings: creator.totalRatings,
+     isVerified: creator.isVerified,
+     isLive: creator.isLive,
+     bookingPrice: creator.bookingPrice,
+     subscriptionPrice: creator.subscriptionPrice,
+     specialties: creator.specialties,
+     languages: creator.languages,
+     isAvailableForBooking: creator.isAvailableForBooking,
+     createdAt: creator.createdAt,
+     placeOfOperation: creator.placeOfOperation,
+     user: creator.user
+   }));
+
+   res.status(StatusCodes.OK).json({
+     success: true,
+     data: transformedRows,
+     criteria: searchCriteria,
+     location: searchLocation,
+     total: transformedRows.length
+   });
+ } catch (error) {
+   next(error);
+ }
 };
 
 module.exports = {
